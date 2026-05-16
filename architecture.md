@@ -626,7 +626,7 @@ Windows: `SIGTERM` được Node map sang `TerminateProcess` — acceptable cho 
 
 ## ARCH-9 — Plugin manifest & slash commands
 
-### ARCH-9.1 — `plugin.json`
+### ARCH-9.1 — `.claude-plugin/plugin.json`
 
 ```json
 {
@@ -782,7 +782,8 @@ verify state clean.
 
 ```
 claude-remote-mcp/
-├── plugin.json                  # ARCH-9.1
+├── .claude-plugin/
+│   └── plugin.json              # ARCH-9.1
 ├── package.json
 ├── tsconfig.json
 ├── vitest.config.ts
@@ -888,12 +889,12 @@ Khi viết task `tasks/<n>-<slug>.md`, reference ARCH-x.y trong field
 Architecture refs:
 - ARCH-1.1 (high-level diagram)
 - ARCH-2 (runtime model)
-- ARCH-9.1 (plugin.json)
+- ARCH-9.1 (.claude-plugin/plugin.json)
 - ARCH-14 (repo layout)
 - ARCH-15 (dependencies)
 
 Deliverable:
-- plugin.json + package.json + tsconfig.json
+- .claude-plugin/plugin.json + package.json + tsconfig.json
 - src/server.ts boot được, register 1 dummy tool "ping"
 - /plugin install local path → gọi được tool ping
 ```

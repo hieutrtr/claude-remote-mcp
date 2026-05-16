@@ -8,7 +8,7 @@
 
 - `package.json` với deps tối thiểu (ARCH-15).
 - `tsconfig.json` strict mode, target ES2022, module NodeNext.
-- `plugin.json` đăng ký MCP server (ARCH-9.1).
+- `.claude-plugin/plugin.json` đăng ký MCP server (ARCH-9.1).
 - `src/server.ts` boot được MCP server qua stdio, register 1 tool "ping".
 - `src/types.ts` Zod schemas cho ping.
 - Build script `npm run build` → `dist/`.

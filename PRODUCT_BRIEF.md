@@ -272,7 +272,8 @@ vì fail giữa đường.
 
 ```
 claude-remote-mcp/
-├── plugin.json
+├── .claude-plugin/
+│   └── plugin.json
 ├── package.json
 ├── src/
 │   ├── server.ts             # MCP server entry
