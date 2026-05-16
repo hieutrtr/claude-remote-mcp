@@ -1,6 +1,6 @@
 ---
 description: List Claude Remote Control sessions tracked in the local registry. Reconciles dead PIDs before showing.
-argument-hint: [--all] [--tag <tag>]
+argument-hint: "[--all] [--tag <tag>]"
 ---
 
 Call the `list_remote_sessions` MCP tool from `claude-remote-mcp`.

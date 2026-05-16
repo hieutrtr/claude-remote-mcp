@@ -1,6 +1,6 @@
 ---
 description: Stop a Claude Remote Control session by session_id or pid.
-argument-hint: <session_id_or_pid>
+argument-hint: "<session_id_or_pid>"
 ---
 
 Call the `stop_remote_session` MCP tool from `claude-remote-mcp`.

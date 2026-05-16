@@ -1,19 +1,20 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "claude-remote-mcp",
   "version": "0.1.0",
   "description": "Spawn and manage Claude Remote Control sessions from inside a Claude Code session.",
+  "author": {
+    "name": "hieutrtr",
+    "url": "https://github.com/hieutrtr"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/hieutrtr/claude-remote-mcp",
+  "repository": "https://github.com/hieutrtr/claude-remote-mcp",
+  "keywords": ["remote-control", "mcp", "orchestrator", "worktree", "remote-session"],
   "mcpServers": {
     "claude-remote-mcp": {
       "command": "node",
-      "args": ["${pluginDir}/dist/server.js"]
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/server.js"]
     }
-  },
-  "commands": [
-    "commands/spawn-remote.md",
-    "commands/list-remote.md",
-    "commands/stop-remote.md"
-  ],
-  "requires": {
-    "claudeCode": ">=2.1.51"
   }
 }

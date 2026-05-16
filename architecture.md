@@ -630,27 +630,34 @@ Windows: `SIGTERM` được Node map sang `TerminateProcess` — acceptable cho 
 
 ```json
 {
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "claude-remote-mcp",
   "version": "0.1.0",
   "description": "Spawn and manage Claude Remote Control sessions from inside a Claude Code session.",
+  "license": "MIT",
+  "homepage": "https://github.com/hieutrtr/claude-remote-mcp",
+  "repository": "https://github.com/hieutrtr/claude-remote-mcp",
+  "keywords": ["remote-control", "mcp", "orchestrator", "worktree", "remote-session"],
   "mcpServers": {
     "claude-remote-mcp": {
       "command": "node",
-      "args": ["${pluginDir}/dist/server.js"]
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/server.js"]
     }
-  },
-  "commands": [
-    "commands/spawn-remote.md",
-    "commands/list-remote.md",
-    "commands/stop-remote.md"
-  ],
-  "requires": {
-    "claudeCode": ">=2.1.51"
   }
 }
 ```
 
-Verify field names khớp Claude Code plugin spec hiện tại khi spike M0.
+Notes:
+
+- The variable name is **`${CLAUDE_PLUGIN_ROOT}`** (NOT `${pluginDir}` — that
+  is not a real Claude Code substitution).
+- The `commands/` directory at plugin root is **auto-discovered**; no need to
+  list each file in the manifest.
+- Plugin root = repo root, **not** `.claude-plugin/`. All component
+  directories (`commands/`, `agents/`, `hooks/`, `skills/`, `bin/`) live at
+  repo root; only `plugin.json` lives inside `.claude-plugin/`.
+- There is **no `requires` field** in the official schema. Minimum Claude
+  Code version is enforced at runtime by the MCP server (preflight check).
 
 ### ARCH-9.2 — Slash commands
 

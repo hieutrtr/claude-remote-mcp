@@ -1,6 +1,6 @@
 ---
 description: Spawn a Claude Remote Control session in a folder (optionally a git worktree) and return the URL so the user can pick it up on mobile/web.
-argument-hint: <folder> [name=...] [mode=same-dir|worktree|session]
+argument-hint: "<folder> [name=...] [mode=same-dir|worktree|session]"
 ---
 
 Use the `spawn_remote_session` MCP tool from `claude-remote-mcp` with these
