@@ -126,12 +126,17 @@ manage sessions spawned earlier.
 ## Development
 
 ```bash
-npm install         # one-time
-npm run build       # typecheck + esbuild bundle to dist/server.js
-npm run typecheck   # tsc --noEmit only
-npm test            # vitest (22 tests)
-bash scripts/smoke.sh  # end-to-end MCP stdio smoke
+npm install --include=dev  # one-time, get build/test deps
+npm run build              # typecheck + esbuild bundle to dist/server.js
+npm run typecheck          # tsc --noEmit only
+npm test                   # vitest (22 tests)
+bash scripts/smoke.sh      # end-to-end MCP stdio smoke
 ```
+
+> The `--include=dev` flag is needed because `.npmrc` sets `omit=dev`
+> (which prevents `claude plugin install` from pulling ~90MB of build
+> tooling into every user's plugin cache). Without it, `npm install`
+> skips devDependencies and the build will fail.
 
 The build produces a single self-contained `dist/server.js` (≈ 760KB) with
 all runtime dependencies inlined. The bundle is committed so consumers
