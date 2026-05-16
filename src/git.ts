@@ -177,3 +177,35 @@ export function defaultWorktreePath(repoRoot: string, sessionName: string): stri
   const safe = sessionName.replace(/[^a-zA-Z0-9._-]/g, "-");
   return path.join(repoRoot, "..", `${path.basename(repoRoot)}-${safe}`);
 }
+
+export async function gitInit(
+  cwd: string,
+  opts: { initialBranch?: string; initialCommit?: boolean } = {},
+): Promise<void> {
+  const branch = opts.initialBranch ?? "main";
+  const init = await runCommand("git", ["init", "-b", branch], {
+    cwd,
+    timeoutMs: 10_000,
+  });
+  if (init.exitCode !== 0) {
+    throw new CrmError(
+      ErrorCodes.WORKTREE_FAILED,
+      `git init failed: ${init.stderr.trim() || init.stdout.trim()}`,
+      { details: { cwd, branch } },
+    );
+  }
+  if (opts.initialCommit !== false) {
+    const commit = await runCommand(
+      "git",
+      ["commit", "--allow-empty", "-m", "Initial commit"],
+      { cwd, timeoutMs: 10_000 },
+    );
+    if (commit.exitCode !== 0) {
+      throw new CrmError(
+        ErrorCodes.WORKTREE_FAILED,
+        `git initial commit failed: ${commit.stderr.trim() || commit.stdout.trim()}`,
+        { details: { cwd } },
+      );
+    }
+  }
+}

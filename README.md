@@ -68,6 +68,22 @@ After install, plugin skills are namespaced as `/claude-remote-mcp:<name>`:
 > /claude-remote-mcp:spawn-remote ./migrations name=alembic
 ```
 
+Folder paths resolve against `$CLAUDE_PROJECT_DIR` (the directory you launched
+`claude` from), **not** the plugin install location. So `./migrations` always
+lands inside your project, never inside the plugin cache.
+
+### Fresh git repo per session
+
+Pass `git_init: true` to make the spawned session's folder its own git repo
+(runs `git init -b main` and creates an empty initial commit after `mkdir`):
+
+```text
+> hãy spawn 1 remote session ở ./demo-project với git_init=true
+```
+
+This is mutually exclusive with `spawn_mode: "worktree"` — a worktree is a
+branch off an existing repo, while `git_init` creates a fresh one.
+
 The orchestrator runs `check_remote_ready` first, then `spawn_remote_session`.
 You get a `https://claude.ai/code/...` URL back; open it on your phone and keep
 chatting from there. The orchestrator session can close — the remote child is
@@ -91,7 +107,7 @@ the underlying MCP tools (`spawn_remote_session`, `list_remote_sessions`,
 | Tool | What it does |
 | --- | --- |
 | `check_remote_ready` | Run all pre-flight checks (binary, version, auth, trust, network, state, platform). |
-| `spawn_remote_session` | Create folder/worktree, spawn `claude remote-control` detached, return URL. |
+| `spawn_remote_session` | Create folder/worktree, optionally `git init` for a fresh repo, spawn `claude remote-control` detached, return URL. |
 | `list_remote_sessions` | List tracked sessions, reconciling dead PIDs. |
 | `stop_remote_session` | SIGTERM → SIGKILL fallback. |
 | `get_session_link` | Re-fetch URL/QR for a session. |

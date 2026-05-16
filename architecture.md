@@ -330,6 +330,8 @@ z.object({
   sandbox: z.boolean().optional(),
   initial_prompt: z.string().optional(),
   tags: z.array(z.string()).default([]),
+  git_init: z.boolean().default(false),
+  git_init_branch: z.string().default('main'),
 })
 ```
 
@@ -338,26 +340,39 @@ z.object({
 
 **Algorithm**:
 
-1. Resolve `folder` qua `path.resolve(process.cwd(), input.folder)`.
-2. Nếu `spawn_mode === 'worktree'`:
-   - Verify cwd là git repo.
-   - `git worktree add <folder> -b <branch>` (branch = `input.worktree_branch
-     ?? "claude/" + name`).
-3. Else `mkdir -p folder`.
-4. Generate `session_id` ([ARCH-4.6](#arch-46--concurrency-invariants)).
-5. Build argv: `claude` + optional `--remote-control "<initial_prompt>"` nếu
+1. Compute `projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd()`
+   ([ARCH-8.4](#arch-84--path-utilities)). **Critical**: when the plugin is
+   installed under `~/.claude/plugins/cache/...`, the MCP server's `cwd` is
+   the plugin install dir, NOT the user's project. Always use
+   `CLAUDE_PROJECT_DIR` to anchor relative paths and to find the user's git
+   repo for worktree mode. Falling back to `process.cwd()` caused worktrees
+   to be created off the plugin's own git history in early versions.
+2. Resolve `folder` qua `path.resolve(projectDir, input.folder)`.
+3. Nếu `spawn_mode === 'worktree'`:
+   - Reject if `git_init === true` (`INVALID_INPUT`) — mutually exclusive.
+   - Verify `projectDir` là git repo. Else `NOT_A_GIT_REPO`.
+   - `git worktree add -b <branch> <folder>` (branch = `input.worktree_branch
+     ?? "claude/" + name`). `git worktree add` creates the folder.
+4. Else (`same-dir` / `session`):
+   - `mkdir -p folder`.
+   - If `git_init` is true AND folder is not already a git repo:
+     `git init -b <git_init_branch>` then `git commit --allow-empty -m
+     "Initial commit"`. This makes the session's folder a fresh repo with a
+     HEAD ref, so `git log`, `git checkout`, etc. all work out of the box.
+5. Generate `session_id` ([ARCH-4.6](#arch-46--concurrency-invariants)).
+6. Build argv: `claude` + optional `--remote-control "<initial_prompt>"` nếu
    có (xem [ARCH-7.2](#arch-72--commands-wrapped)) **hoặc** `remote-control`
    nếu không có `initial_prompt`. Thêm `--name`, `--spawn`, `--sandbox` tương
    ứng.
-6. Spawn detached ([ARCH-8.1](#arch-81--detach)) với `cwd: folder`,
+7. Spawn detached ([ARCH-8.1](#arch-81--detach)) với `cwd: folder`,
    `stdio: ['ignore', logFd, logFd]`.
-7. Tail log file đến khi URL regex match (timeout 30s).
-8. Acquire state lock, append entry, release.
-9. Audit `session_spawned`.
-10. Return entry.
+8. Tail log file đến khi URL regex match (timeout 30s).
+9. Acquire state lock, append entry, release.
+10. Audit `session_spawned`.
+11. Return entry.
 
 **Error codes**: `WORKSPACE_NOT_TRUSTED`, `URL_TIMEOUT`, `WORKTREE_FAILED`,
-`CLAUDE_NOT_FOUND`, `VERSION_TOO_OLD`.
+`NOT_A_GIT_REPO`, `INVALID_INPUT`, `CLAUDE_NOT_FOUND`, `VERSION_TOO_OLD`.
 
 ### ARCH-6.2 — `list_remote_sessions`
 

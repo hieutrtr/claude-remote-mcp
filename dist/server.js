@@ -21647,6 +21647,11 @@ function childLogPath(sessionId) {
 function lockFilePath() {
   return `${stateFilePath()}.lock`;
 }
+function orchestratorProjectDir() {
+  const fromEnv = process.env["CLAUDE_PROJECT_DIR"];
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+  return process.cwd();
+}
 
 // src/audit.ts
 function appendAudit(event, data = {}) {
@@ -22101,7 +22106,9 @@ var SpawnInputSchema = external_exports.object({
   worktree_branch: external_exports.string().optional(),
   sandbox: external_exports.boolean().optional(),
   initial_prompt: external_exports.string().optional(),
-  tags: external_exports.array(external_exports.string()).default([])
+  tags: external_exports.array(external_exports.string()).default([]),
+  git_init: external_exports.boolean().default(false),
+  git_init_branch: external_exports.string().default("main")
 });
 var ListInputSchema = external_exports.object({
   filter_tags: external_exports.array(external_exports.string()).optional(),
@@ -22635,6 +22642,34 @@ function defaultWorktreePath(repoRoot, sessionName) {
   const safe = sessionName.replace(/[^a-zA-Z0-9._-]/g, "-");
   return path7.join(repoRoot, "..", `${path7.basename(repoRoot)}-${safe}`);
 }
+async function gitInit(cwd, opts = {}) {
+  const branch = opts.initialBranch ?? "main";
+  const init = await runCommand("git", ["init", "-b", branch], {
+    cwd,
+    timeoutMs: 1e4
+  });
+  if (init.exitCode !== 0) {
+    throw new CrmError(
+      ErrorCodes.WORKTREE_FAILED,
+      `git init failed: ${init.stderr.trim() || init.stdout.trim()}`,
+      { details: { cwd, branch } }
+    );
+  }
+  if (opts.initialCommit !== false) {
+    const commit = await runCommand(
+      "git",
+      ["commit", "--allow-empty", "-m", "Initial commit"],
+      { cwd, timeoutMs: 1e4 }
+    );
+    if (commit.exitCode !== 0) {
+      throw new CrmError(
+        ErrorCodes.WORKTREE_FAILED,
+        `git initial commit failed: ${commit.stderr.trim() || commit.stdout.trim()}`,
+        { details: { cwd } }
+      );
+    }
+  }
+}
 
 // src/tools/mergeBackSession.ts
 var definition6 = {
@@ -22801,7 +22836,9 @@ var definition7 = {
       worktree_branch: { type: "string" },
       sandbox: { type: "boolean" },
       initial_prompt: { type: "string", description: 'Optional opening prompt; uses `claude --remote-control "<prompt>"` form when provided.' },
-      tags: { type: "array", items: { type: "string" }, default: [] }
+      tags: { type: "array", items: { type: "string" }, default: [] },
+      git_init: { type: "boolean", description: "After mkdir, run `git init -b <branch>` and create an empty initial commit. Ignored for worktree mode.", default: false },
+      git_init_branch: { type: "string", description: "Branch name passed to `git init -b` when git_init is true.", default: "main" }
     },
     required: ["folder"],
     additionalProperties: false
@@ -22810,25 +22847,37 @@ var definition7 = {
 async function handler7(raw) {
   const input = SpawnInputSchema.parse(raw);
   const claudeBin = resolveClaudeBin();
-  const orchestratorCwd = process.cwd();
-  const absFolder = path8.resolve(orchestratorCwd, input.folder);
+  const projectDir = orchestratorProjectDir();
+  const absFolder = path8.resolve(projectDir, input.folder);
   const sessionName = input.name ?? (path8.basename(absFolder) || "remote-session");
   let workingDir = absFolder;
   let worktreeBranch = null;
   if (input.spawn_mode === "worktree") {
-    if (!await isGitRepo(orchestratorCwd)) {
+    if (input.git_init) {
       throw new CrmError(
-        ErrorCodes.NOT_A_GIT_REPO,
-        `spawn_mode=worktree requires the orchestrator cwd to be inside a git repo`,
-        { details: { cwd: orchestratorCwd } }
+        ErrorCodes.INVALID_INPUT,
+        "git_init=true is incompatible with spawn_mode=worktree. A worktree branches off an existing repo and cannot init a fresh one."
       );
     }
-    const repoRoot = await gitTopLevel(orchestratorCwd);
+    if (!await isGitRepo(projectDir)) {
+      throw new CrmError(
+        ErrorCodes.NOT_A_GIT_REPO,
+        `spawn_mode=worktree requires the orchestrator project dir to be inside a git repo. Tried: ${projectDir}`,
+        { details: { project_dir: projectDir } }
+      );
+    }
+    const repoRoot = await gitTopLevel(projectDir);
     workingDir = path8.isAbsolute(input.folder) ? input.folder : defaultWorktreePath(repoRoot, sessionName);
     worktreeBranch = input.worktree_branch ?? `claude/${sessionName}`;
     await worktreeAdd(repoRoot, workingDir, worktreeBranch);
   } else {
     mkdirSync4(workingDir, { recursive: true });
+    if (input.git_init && !await isGitRepo(workingDir)) {
+      await gitInit(workingDir, {
+        initialBranch: input.git_init_branch,
+        initialCommit: true
+      });
+    }
   }
   const sessionId = await mutate((state) => {
     const existing = new Set(state.sessions.map((s) => s.session_id));

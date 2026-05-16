@@ -27,3 +27,17 @@ export function childLogPath(sessionId: string): string {
 export function lockFilePath(): string {
   return `${stateFilePath()}.lock`;
 }
+
+/**
+ * The user's project root, as exposed by Claude Code via the
+ * CLAUDE_PROJECT_DIR env var (same value passed to hooks). Used so that
+ * relative `folder` inputs resolve against the orchestrator's actual project
+ * directory rather than the MCP server process cwd (which, when the plugin
+ * is installed, is the plugin install directory itself — definitely NOT
+ * where the user wants worktrees / mkdir to happen).
+ */
+export function orchestratorProjectDir(): string {
+  const fromEnv = process.env["CLAUDE_PROJECT_DIR"];
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+  return process.cwd();
+}
