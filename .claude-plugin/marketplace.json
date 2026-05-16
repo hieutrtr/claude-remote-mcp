@@ -1,0 +1,15 @@
+{
+  "name": "hieutrtr",
+  "description": "Personal Claude Code plugin catalog by hieutrtr.",
+  "owner": {
+    "name": "hieutrtr",
+    "url": "https://github.com/hieutrtr"
+  },
+  "plugins": [
+    {
+      "name": "claude-remote-mcp",
+      "source": "./",
+      "description": "Spawn and manage Claude Remote Control sessions from inside a Claude Code session."
+    }
+  ]
+}

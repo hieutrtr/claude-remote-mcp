@@ -26,50 +26,65 @@ See [PRODUCT_BRIEF.md](./PRODUCT_BRIEF.md) for product framing and
 
 ## Install
 
-### From source
+The bundled `dist/server.js` is committed, so no `npm install` or build step
+is needed to consume the plugin.
 
-The bundled `dist/server.js` is committed, so no build step or
-`npm install` is needed to consume the plugin.
+### Option A — Install via marketplace (recommended)
+
+This repo doubles as a single-plugin marketplace (`.claude-plugin/marketplace.json`).
+In any Claude Code session:
+
+```text
+/plugin marketplace add hieutrtr/claude-remote-mcp
+/plugin install claude-remote-mcp@hieutrtr
+```
+
+Restart the session (or run `/reload-plugins`).
+
+### Option B — Local dev / test (no install)
+
+For a single session without persisting an install:
 
 ```bash
 git clone https://github.com/hieutrtr/claude-remote-mcp.git
 ```
 
-Then in any Claude Code session:
-
-```text
-/plugin install /absolute/path/to/claude-remote-mcp
+```bash
+claude --plugin-dir /absolute/path/to/claude-remote-mcp
 ```
 
-(Only run `npm install && npm run build` if you intend to modify the source
-and rebuild the bundle.)
+The `--plugin-dir` flag loads the plugin for that session only. If you also
+have it installed via marketplace, `--plugin-dir` takes precedence.
 
-### From marketplace (post-release)
-
-```text
-/plugin install claude-remote-mcp
-```
+> `claude plugin install` does **not** accept a local path — it only resolves
+> plugins from a marketplace (`name@marketplace` syntax). Use `--plugin-dir`
+> for local-only testing.
 
 ## Quickstart
 
-In a Claude Code session:
+After install, plugin skills are namespaced as `/claude-remote-mcp:<name>`:
 
 ```text
-> /spawn-remote ./migrations name=alembic
+> /claude-remote-mcp:spawn-remote ./migrations name=alembic
 ```
 
-The orchestrator runs `check_remote_ready`, then `spawn_remote_session`. You
-get a `https://claude.ai/code/...` URL back; open it on your phone and keep
-chatting from there. The orchestrator session can close — the remote child
-process is detached and stays alive.
+The orchestrator runs `check_remote_ready` first, then `spawn_remote_session`.
+You get a `https://claude.ai/code/...` URL back; open it on your phone and keep
+chatting from there. The orchestrator session can close — the remote child is
+detached and stays alive.
 
 Other commands:
 
 ```text
-> /list-remote                    # show alive sessions
-> /list-remote --all              # include stopped/dead
-> /stop-remote <session_id_or_pid>
+> /claude-remote-mcp:list-remote                     # show alive sessions
+> /claude-remote-mcp:list-remote --all               # include stopped/dead
+> /claude-remote-mcp:stop-remote <session_id_or_pid>
 ```
+
+You can also describe the intent in natural language and Claude will call
+the underlying MCP tools (`spawn_remote_session`, `list_remote_sessions`,
+`stop_remote_session`, `check_remote_ready`, `install_plugin`,
+`install_mcp_server`, `get_session_link`, `merge_back_session`) directly.
 
 ## MCP tools
 
@@ -129,6 +144,11 @@ against a fake `claude` binary.
 ## Layout
 
 ```
+.claude-plugin/
+  plugin.json         Claude Code plugin manifest
+  marketplace.json    single-plugin marketplace catalog
+dist/
+  server.js           bundled MCP server (committed, no build needed by consumers)
 src/
   server.ts           MCP stdio entry
   paths.ts            data dir resolution
