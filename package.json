@@ -12,7 +12,8 @@
     "claude-remote-mcp": "dist/server.js"
   },
   "scripts": {
-    "build": "tsc -p .",
+    "build": "npm run typecheck && npm run bundle",
+    "bundle": "node scripts/bundle.mjs",
     "watch": "tsc -p . -w",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -28,6 +29,7 @@
     "@types/node": "^22.7.4",
     "@types/proper-lockfile": "^4.1.4",
     "@types/semver": "^7.5.8",
+    "esbuild": "^0.28.0",
     "typescript": "^5.6.2",
     "vitest": "^2.1.2"
   },

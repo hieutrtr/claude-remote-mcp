@@ -26,13 +26,13 @@ See [PRODUCT_BRIEF.md](./PRODUCT_BRIEF.md) for product framing and
 
 ## Install
 
-### From source (during development)
+### From source
+
+The bundled `dist/server.js` is committed, so no build step or
+`npm install` is needed to consume the plugin.
 
 ```bash
 git clone https://github.com/hieutrtr/claude-remote-mcp.git
-cd claude-remote-mcp
-npm install
-npm run build
 ```
 
 Then in any Claude Code session:
@@ -40,6 +40,9 @@ Then in any Claude Code session:
 ```text
 /plugin install /absolute/path/to/claude-remote-mcp
 ```
+
+(Only run `npm install && npm run build` if you intend to modify the source
+and rebuild the bundle.)
 
 ### From marketplace (post-release)
 
@@ -108,10 +111,16 @@ manage sessions spawned earlier.
 ## Development
 
 ```bash
-npm run build       # tsc -> dist/
-npm run typecheck   # tsc --noEmit
-npm test            # vitest
+npm install         # one-time
+npm run build       # typecheck + esbuild bundle to dist/server.js
+npm run typecheck   # tsc --noEmit only
+npm test            # vitest (22 tests)
+bash scripts/smoke.sh  # end-to-end MCP stdio smoke
 ```
+
+The build produces a single self-contained `dist/server.js` (≈ 760KB) with
+all runtime dependencies inlined. The bundle is committed so consumers
+don't need to install dev tools.
 
 22 tests cover paths, platform helpers, error model, file-locked registry
 (including 100 parallel writes), URL tailer, and end-to-end spawn/list/stop
