@@ -1,0 +1,40 @@
+{
+  "name": "claude-remote-mcp",
+  "version": "0.1.0",
+  "description": "Spawn and manage Claude Remote Control sessions from inside a Claude Code session.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "dist/server.js",
+  "bin": {
+    "claude-remote-mcp": "dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -p . -w",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p . --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "proper-lockfile": "^4.1.2",
+    "semver": "^7.6.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@types/proper-lockfile": "^4.1.4",
+    "@types/semver": "^7.5.8",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.2"
+  },
+  "files": [
+    "dist",
+    "plugin.json",
+    "commands",
+    "README.md"
+  ]
+}

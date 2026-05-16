@@ -1,0 +1,19 @@
+{
+  "name": "claude-remote-mcp",
+  "version": "0.1.0",
+  "description": "Spawn and manage Claude Remote Control sessions from inside a Claude Code session.",
+  "mcpServers": {
+    "claude-remote-mcp": {
+      "command": "node",
+      "args": ["${pluginDir}/dist/server.js"]
+    }
+  },
+  "commands": [
+    "commands/spawn-remote.md",
+    "commands/list-remote.md",
+    "commands/stop-remote.md"
+  ],
+  "requires": {
+    "claudeCode": ">=2.1.51"
+  }
+}
