@@ -14,5 +14,5 @@ After the tool returns:
 
 - Confirm to the user that the session was stopped (mention the signal that
   finally killed it).
-- If the call failed with `SESSION_NOT_FOUND`, suggest `/list-remote --all`
+- If the call failed with `SESSION_NOT_FOUND`, suggest `/claude-remote-mcp:list-remote --all`
   to inspect the registry.

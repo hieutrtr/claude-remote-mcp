@@ -516,12 +516,16 @@ Mỗi sub-check là 1 function ở `src/preflight/<name>.ts`. Test riêng từng
 
 - `claude_present`: `which claude` / `where claude`.
 - `claude_version`: `claude --version`, parse semver, compare `>= 2.1.51`.
-- `authenticated`: `claude auth status` (verify command tồn tại — fallback
-  parse `claude /status` output không khả thi qua CLI; need adjust khi spike).
-- `org_remote_control`: spawn `claude remote-control --help` không hữu ích; v1
-  chấp nhận test thực bằng spawn thử + timeout ngắn, hoặc bỏ check này và để
-  fail tự nhiên ở spawn. Decision khi spike.
-- `workspace_trusted`: đọc `~/.claude/trust.json` (verify path khi spike).
+- `authenticated`: chạy `claude auth status` (trả JSON
+  `{loggedIn, authMethod, apiProvider}`). Reject:
+  - `ANTHROPIC_API_KEY` env set ⇒ API key không support Remote Control.
+  - `CLAUDE_CODE_OAUTH_TOKEN` env set hoặc `authMethod === "oauth_token"` ⇒
+    long-lived token chỉ inference-only.
+  - `apiProvider !== "firstParty"` ⇒ Bedrock/Vertex/Foundry không support.
+- `org_remote_control`: **không** có trong v1 — không có CLI flag hữu ích để
+  kiểm tra trước; fail sẽ xảy ra tự nhiên ở `spawn_remote_session` lần đầu
+  với message từ `claude remote-control` stderr.
+- `workspace_trusted`: đọc `~/.claude.json`, key `projects[<abs_folder>].hasTrustDialogAccepted`.
 - `outbound_https`: HEAD https://api.anthropic.com với timeout 3s.
 - `state_writable`: stat dir + write test file.
 - `platform_detach_support`: `os.platform() in ['linux','darwin','win32']`.
@@ -538,11 +542,15 @@ Mỗi sub-check là 1 function ở `src/preflight/<name>.ts`. Test riêng từng
 ### ARCH-7.2 — Commands wrapped
 
 ```ts
-claudeVersion(): Promise<SemVer>
-claudeAuthStatus(): Promise<{authenticated: boolean, method: string}>
-claudePluginInstall(opts): Promise<{version: string}>
-claudeMcpAdd(opts): Promise<void>
-spawnRemoteControl(opts): ChildProcess  // detached
+resolveClaudeBin(): string                                // ARCH-7.3 path resolution
+runClaude(args, opts): Promise<RunResult>                 // generic foreground exec
+claudeVersion(): Promise<string>                          // parse `claude --version`
+claudePluginInstall(opts): Promise<{stdout, version|null}>// ARCH-6.5
+claudeMcpAdd(opts): Promise<{stdout}>                     // ARCH-6.6
+// auth status is consumed directly inside src/preflight/authenticated.ts
+// (calls `runClaude(["auth","status"])`, parses JSON
+//  {loggedIn, authMethod, apiProvider}).
+// spawn of `claude remote-control` is done in src/platform.ts spawnDetached.
 ```
 
 Tất cả return structured, không trả raw stdout cho caller.
@@ -790,14 +798,20 @@ verify state clean.
 ```
 claude-remote-mcp/
 ├── .claude-plugin/
-│   └── plugin.json              # ARCH-9.1
+│   ├── plugin.json              # ARCH-9.1
+│   └── marketplace.json         # single-plugin marketplace catalog
+├── dist/
+│   └── server.js                # esbuild bundle (committed)
 ├── package.json
 ├── tsconfig.json
 ├── vitest.config.ts
-├── commands/                    # ARCH-9.2
+├── commands/                    # ARCH-9.2 (auto-discovered)
 │   ├── spawn-remote.md
 │   ├── list-remote.md
 │   └── stop-remote.md
+├── scripts/
+│   ├── bundle.mjs               # esbuild entry
+│   └── smoke.sh                 # end-to-end MCP stdio smoke
 ├── src/
 │   ├── server.ts                # MCP entry, stdio bootstrap
 │   ├── types.ts                 # Zod schemas + TS types (ARCH-4.2)
@@ -846,7 +860,12 @@ V1 dependencies tối thiểu:
 
 Dev:
 
-- `typescript`, `tsx`, `vitest`, `@types/node`.
+- `typescript`, `vitest`, `esbuild`, `@types/node`,
+  `@types/proper-lockfile`, `@types/semver`.
+
+`esbuild` bundles the server into a single self-contained `dist/server.js`
+(~760KB, all runtime deps inlined). The bundle is committed so plugin
+consumers don't need `npm install`.
 
 **Không** thêm: heavy logging framework, ORM, HTTP server, web UI. Plugin
 phải nhẹ.

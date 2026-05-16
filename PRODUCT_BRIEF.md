@@ -273,7 +273,11 @@ vì fail giữa đường.
 ```
 claude-remote-mcp/
 ├── .claude-plugin/
-│   └── plugin.json
+│   ├── plugin.json          # plugin manifest
+│   └── marketplace.json     # single-plugin marketplace catalog
+├── commands/                # slash commands (auto-discovered at plugin root)
+├── dist/
+│   └── server.js            # esbuild bundle (committed, no deps needed)
 ├── package.json
 ├── src/
 │   ├── server.ts             # MCP server entry
@@ -294,11 +298,13 @@ claude-remote-mcp/
 └── PRODUCT_BRIEF.md
 ```
 
-`plugin.json` đăng ký 1 MCP server và các slash command alias:
+`.claude-plugin/plugin.json` đăng ký 1 MCP server. Claude Code auto-discover
+folder `commands/` ở plugin root — không cần list file trong manifest. Slash
+command bị namespace theo tên plugin:
 
-- `/spawn-remote <folder>` → `spawn_remote_session`
-- `/list-remote` → `list_remote_sessions`
-- `/stop-remote <id>` → `stop_remote_session`
+- `/claude-remote-mcp:spawn-remote <folder>` → `spawn_remote_session`
+- `/claude-remote-mcp:list-remote` → `list_remote_sessions`
+- `/claude-remote-mcp:stop-remote <id>` → `stop_remote_session`
 
 Slash command chỉ là syntactic sugar; agent vẫn có thể gọi tool trực tiếp.
 

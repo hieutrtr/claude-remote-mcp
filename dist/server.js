@@ -3233,8 +3233,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path10) {
-      let input = path10;
+    function removeDotSegments(path9) {
+      let input = path9;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3486,8 +3486,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path10, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path10 && path10 !== "/" ? path10 : void 0;
+        const [path9, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path9 && path9 !== "/" ? path9 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -8918,14 +8918,14 @@ var require_polyfills = __commonJS({
       fs.fstatSync = statFixSync(fs.fstatSync);
       fs.lstatSync = statFixSync(fs.lstatSync);
       if (fs.chmod && !fs.lchmod) {
-        fs.lchmod = function(path10, mode, cb) {
+        fs.lchmod = function(path9, mode, cb) {
           if (cb) process.nextTick(cb);
         };
         fs.lchmodSync = function() {
         };
       }
       if (fs.chown && !fs.lchown) {
-        fs.lchown = function(path10, uid, gid, cb) {
+        fs.lchown = function(path9, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
         fs.lchownSync = function() {
@@ -8992,9 +8992,9 @@ var require_polyfills = __commonJS({
         };
       })(fs.readSync);
       function patchLchmod(fs2) {
-        fs2.lchmod = function(path10, mode, callback) {
+        fs2.lchmod = function(path9, mode, callback) {
           fs2.open(
-            path10,
+            path9,
             constants.O_WRONLY | constants.O_SYMLINK,
             mode,
             function(err, fd) {
@@ -9010,8 +9010,8 @@ var require_polyfills = __commonJS({
             }
           );
         };
-        fs2.lchmodSync = function(path10, mode) {
-          var fd = fs2.openSync(path10, constants.O_WRONLY | constants.O_SYMLINK, mode);
+        fs2.lchmodSync = function(path9, mode) {
+          var fd = fs2.openSync(path9, constants.O_WRONLY | constants.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
@@ -9032,8 +9032,8 @@ var require_polyfills = __commonJS({
       }
       function patchLutimes(fs2) {
         if (constants.hasOwnProperty("O_SYMLINK") && fs2.futimes) {
-          fs2.lutimes = function(path10, at, mt, cb) {
-            fs2.open(path10, constants.O_SYMLINK, function(er, fd) {
+          fs2.lutimes = function(path9, at, mt, cb) {
+            fs2.open(path9, constants.O_SYMLINK, function(er, fd) {
               if (er) {
                 if (cb) cb(er);
                 return;
@@ -9045,8 +9045,8 @@ var require_polyfills = __commonJS({
               });
             });
           };
-          fs2.lutimesSync = function(path10, at, mt) {
-            var fd = fs2.openSync(path10, constants.O_SYMLINK);
+          fs2.lutimesSync = function(path9, at, mt) {
+            var fd = fs2.openSync(path9, constants.O_SYMLINK);
             var ret;
             var threw = true;
             try {
@@ -9164,11 +9164,11 @@ var require_legacy_streams = __commonJS({
         ReadStream,
         WriteStream
       };
-      function ReadStream(path10, options) {
-        if (!(this instanceof ReadStream)) return new ReadStream(path10, options);
+      function ReadStream(path9, options) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path9, options);
         Stream.call(this);
         var self = this;
-        this.path = path10;
+        this.path = path9;
         this.fd = null;
         this.readable = true;
         this.paused = false;
@@ -9213,10 +9213,10 @@ var require_legacy_streams = __commonJS({
           self._read();
         });
       }
-      function WriteStream(path10, options) {
-        if (!(this instanceof WriteStream)) return new WriteStream(path10, options);
+      function WriteStream(path9, options) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path9, options);
         Stream.call(this);
-        this.path = path10;
+        this.path = path9;
         this.fd = null;
         this.writable = true;
         this.flags = "w";
@@ -9359,14 +9359,14 @@ var require_graceful_fs = __commonJS({
       fs2.createWriteStream = createWriteStream;
       var fs$readFile = fs2.readFile;
       fs2.readFile = readFile;
-      function readFile(path10, options, cb) {
+      function readFile(path9, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$readFile(path10, options, cb);
-        function go$readFile(path11, options2, cb2, startTime) {
-          return fs$readFile(path11, options2, function(err) {
+        return go$readFile(path9, options, cb);
+        function go$readFile(path10, options2, cb2, startTime) {
+          return fs$readFile(path10, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$readFile, [path11, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$readFile, [path10, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -9376,14 +9376,14 @@ var require_graceful_fs = __commonJS({
       }
       var fs$writeFile = fs2.writeFile;
       fs2.writeFile = writeFile;
-      function writeFile(path10, data, options, cb) {
+      function writeFile(path9, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$writeFile(path10, data, options, cb);
-        function go$writeFile(path11, data2, options2, cb2, startTime) {
-          return fs$writeFile(path11, data2, options2, function(err) {
+        return go$writeFile(path9, data, options, cb);
+        function go$writeFile(path10, data2, options2, cb2, startTime) {
+          return fs$writeFile(path10, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$writeFile, [path11, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$writeFile, [path10, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -9394,14 +9394,14 @@ var require_graceful_fs = __commonJS({
       var fs$appendFile = fs2.appendFile;
       if (fs$appendFile)
         fs2.appendFile = appendFile;
-      function appendFile(path10, data, options, cb) {
+      function appendFile(path9, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$appendFile(path10, data, options, cb);
-        function go$appendFile(path11, data2, options2, cb2, startTime) {
-          return fs$appendFile(path11, data2, options2, function(err) {
+        return go$appendFile(path9, data, options, cb);
+        function go$appendFile(path10, data2, options2, cb2, startTime) {
+          return fs$appendFile(path10, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$appendFile, [path11, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$appendFile, [path10, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -9432,31 +9432,31 @@ var require_graceful_fs = __commonJS({
       var fs$readdir = fs2.readdir;
       fs2.readdir = readdir;
       var noReaddirOptionVersions = /^v[0-5]\./;
-      function readdir(path10, options, cb) {
+      function readdir(path9, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path11, options2, cb2, startTime) {
-          return fs$readdir(path11, fs$readdirCallback(
-            path11,
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path10, options2, cb2, startTime) {
+          return fs$readdir(path10, fs$readdirCallback(
+            path10,
             options2,
             cb2,
             startTime
           ));
-        } : function go$readdir2(path11, options2, cb2, startTime) {
-          return fs$readdir(path11, options2, fs$readdirCallback(
-            path11,
+        } : function go$readdir2(path10, options2, cb2, startTime) {
+          return fs$readdir(path10, options2, fs$readdirCallback(
+            path10,
             options2,
             cb2,
             startTime
           ));
         };
-        return go$readdir(path10, options, cb);
-        function fs$readdirCallback(path11, options2, cb2, startTime) {
+        return go$readdir(path9, options, cb);
+        function fs$readdirCallback(path10, options2, cb2, startTime) {
           return function(err, files) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
               enqueue([
                 go$readdir,
-                [path11, options2, cb2],
+                [path10, options2, cb2],
                 err,
                 startTime || Date.now(),
                 Date.now()
@@ -9527,7 +9527,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      function ReadStream(path10, options) {
+      function ReadStream(path9, options) {
         if (this instanceof ReadStream)
           return fs$ReadStream.apply(this, arguments), this;
         else
@@ -9547,7 +9547,7 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function WriteStream(path10, options) {
+      function WriteStream(path9, options) {
         if (this instanceof WriteStream)
           return fs$WriteStream.apply(this, arguments), this;
         else
@@ -9565,22 +9565,22 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function createReadStream(path10, options) {
-        return new fs2.ReadStream(path10, options);
+      function createReadStream(path9, options) {
+        return new fs2.ReadStream(path9, options);
       }
-      function createWriteStream(path10, options) {
-        return new fs2.WriteStream(path10, options);
+      function createWriteStream(path9, options) {
+        return new fs2.WriteStream(path9, options);
       }
       var fs$open = fs2.open;
       fs2.open = open;
-      function open(path10, flags, mode, cb) {
+      function open(path9, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
-        return go$open(path10, flags, mode, cb);
-        function go$open(path11, flags2, mode2, cb2, startTime) {
-          return fs$open(path11, flags2, mode2, function(err, fd) {
+        return go$open(path9, flags, mode, cb);
+        function go$open(path10, flags2, mode2, cb2, startTime) {
+          return fs$open(path10, flags2, mode2, function(err, fd) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$open, [path11, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$open, [path10, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -10109,7 +10109,7 @@ var require_mtime_precision = __commonJS({
 var require_lockfile = __commonJS({
   "node_modules/proper-lockfile/lib/lockfile.js"(exports, module) {
     "use strict";
-    var path10 = __require("path");
+    var path9 = __require("path");
     var fs = require_graceful_fs();
     var retry = require_retry2();
     var onExit = require_signal_exit();
@@ -10120,7 +10120,7 @@ var require_lockfile = __commonJS({
     }
     function resolveCanonicalPath(file, options, callback) {
       if (!options.realpath) {
-        return callback(null, path10.resolve(file));
+        return callback(null, path9.resolve(file));
       }
       options.fs.realpath(file, callback);
     }
@@ -10921,8 +10921,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path10, errorMaps, issueData } = params;
-  const fullPath = [...path10, ...issueData.path || []];
+  const { data, path: path9, errorMaps, issueData } = params;
+  const fullPath = [...path9, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -11038,11 +11038,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path10, key) {
+  constructor(parent, value, path9, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path10;
+    this._path = path9;
     this._key = key;
   }
   get path() {
@@ -14679,10 +14679,10 @@ function assignProp(target, prop, value) {
     configurable: true
   });
 }
-function getElementAtPath(obj, path10) {
-  if (!path10)
+function getElementAtPath(obj, path9) {
+  if (!path9)
     return obj;
-  return path10.reduce((acc, key) => acc?.[key], obj);
+  return path9.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -15002,11 +15002,11 @@ function aborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path10, issues) {
+function prefixIssues(path9, issues) {
   return issues.map((iss) => {
     var _a;
     (_a = iss).path ?? (_a.path = []);
-    iss.path.unshift(path10);
+    iss.path.unshift(path9);
     return iss;
   });
 }
@@ -21662,44 +21662,14 @@ function appendAudit(event, data = {}) {
   appendFileSync(file, JSON.stringify(record2) + "\n", { encoding: "utf8" });
 }
 
-// src/preflight/authenticated.ts
-import { existsSync, readFileSync } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import path3 from "node:path";
-async function check2() {
-  if (process.env["ANTHROPIC_API_KEY"]) {
-    return {
-      ok: false,
-      reason: "ANTHROPIC_API_KEY is set \u2014 Remote Control requires claude.ai OAuth, not API key",
-      method: "api_key"
-    };
-  }
-  const credPath = path3.join(homedir2(), ".claude", ".credentials.json");
-  if (existsSync(credPath)) {
-    try {
-      const raw = readFileSync(credPath, "utf8");
-      const data = JSON.parse(raw);
-      if (data.claudeAiOauth || data.oauthAccount) {
-        return { ok: true, method: "claude.ai" };
-      }
-    } catch {
-    }
-  }
-  return {
-    ok: false,
-    reason: "No claude.ai OAuth credentials found. Run `claude` then `/login`.",
-    method: "none"
-  };
-}
-
 // src/claudeCli.ts
 import { spawn } from "node:child_process";
-import { existsSync as existsSync2 } from "node:fs";
-import path4 from "node:path";
+import { existsSync } from "node:fs";
+import path3 from "node:path";
 var cachedClaudePath;
 function resolveClaudeBin() {
   const override = process.env["CLAUDE_BIN"];
-  if (override && existsSync2(override)) {
+  if (override && existsSync(override)) {
     return override;
   }
   if (cachedClaudePath !== void 0) return cachedClaudePath;
@@ -21708,11 +21678,11 @@ function resolveClaudeBin() {
     "/opt/node22/bin/claude",
     "/usr/local/bin/claude",
     "/usr/bin/claude",
-    path4.join(home, ".local", "bin", "claude"),
-    path4.join(home, ".claude", "local", "claude")
+    path3.join(home, ".local", "bin", "claude"),
+    path3.join(home, ".claude", "local", "claude")
   ];
   for (const c of candidates) {
-    if (existsSync2(c)) {
+    if (existsSync(c)) {
       cachedClaudePath = c;
       return c;
     }
@@ -21720,11 +21690,11 @@ function resolveClaudeBin() {
   const pathEnv = process.env["PATH"] ?? "";
   const sep = process.platform === "win32" ? ";" : ":";
   for (const dir of pathEnv.split(sep)) {
-    const candidate = path4.join(
+    const candidate = path3.join(
       dir,
       process.platform === "win32" ? "claude.exe" : "claude"
     );
-    if (existsSync2(candidate)) {
+    if (existsSync(candidate)) {
       cachedClaudePath = candidate;
       return candidate;
     }
@@ -21816,6 +21786,73 @@ async function claudeMcpAdd(opts) {
   return { stdout: res.stdout };
 }
 
+// src/preflight/authenticated.ts
+async function check2() {
+  if (process.env["ANTHROPIC_API_KEY"]) {
+    return {
+      ok: false,
+      reason: "ANTHROPIC_API_KEY is set \u2014 Remote Control requires claude.ai OAuth, not API key",
+      method: "api_key"
+    };
+  }
+  if (process.env["CLAUDE_CODE_OAUTH_TOKEN"]) {
+    return {
+      ok: false,
+      reason: "CLAUDE_CODE_OAUTH_TOKEN is set \u2014 long-lived tokens are inference-only and cannot establish Remote Control sessions",
+      method: "oauth_token"
+    };
+  }
+  let res;
+  try {
+    res = await runClaude(["auth", "status"], { timeoutMs: 1e4 });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `Could not run \`claude auth status\`: ${err.message}`,
+      method: "unknown"
+    };
+  }
+  if (res.exitCode !== 0) {
+    return {
+      ok: false,
+      reason: `\`claude auth status\` exited ${res.exitCode}. stderr: ${res.stderr.trim().slice(0, 200)}`,
+      method: "unknown"
+    };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(res.stdout);
+  } catch {
+    return {
+      ok: false,
+      reason: `Unparseable \`claude auth status\` output: ${res.stdout.trim().slice(0, 200)}`,
+      method: "unknown"
+    };
+  }
+  if (!parsed.loggedIn) {
+    return {
+      ok: false,
+      reason: "Not logged in. Run `claude` then `/login` and choose the claude.ai option.",
+      method: parsed.authMethod ?? "none"
+    };
+  }
+  if (parsed.authMethod === "oauth_token") {
+    return {
+      ok: false,
+      reason: "Authenticated with a long-lived token (`claude setup-token`). Remote Control requires the full-scope claude.ai OAuth session \u2014 run `/login` interactively to switch.",
+      method: parsed.authMethod
+    };
+  }
+  if (parsed.apiProvider && parsed.apiProvider !== "firstParty") {
+    return {
+      ok: false,
+      reason: `Authenticated via ${parsed.apiProvider}. Remote Control requires claude.ai (firstParty) auth.`,
+      method: parsed.authMethod ?? "unknown"
+    };
+  }
+  return { ok: true, method: parsed.authMethod ?? "claude.ai" };
+}
+
 // src/preflight/claudePresent.ts
 async function check3() {
   try {
@@ -21868,12 +21905,12 @@ async function check6() {
 
 // src/preflight/stateWritable.ts
 import { mkdirSync as mkdirSync2, unlinkSync, writeFileSync } from "node:fs";
-import path5 from "node:path";
+import path4 from "node:path";
 async function check7() {
   const dir = dataHome();
   try {
     mkdirSync2(dir, { recursive: true });
-    const probe = path5.join(dir, `.write-probe.${process.pid}`);
+    const probe = path4.join(dir, `.write-probe.${process.pid}`);
     writeFileSync(probe, "ok");
     unlinkSync(probe);
     return { ok: true, path: dir };
@@ -21883,12 +21920,12 @@ async function check7() {
 }
 
 // src/preflight/workspaceTrusted.ts
-import { existsSync as existsSync3, readFileSync as readFileSync2 } from "node:fs";
-import { homedir as homedir3 } from "node:os";
-import path6 from "node:path";
+import { existsSync as existsSync2, readFileSync } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import path5 from "node:path";
 async function check8(folder) {
-  const cfgPath = path6.join(homedir3(), ".claude.json");
-  if (!existsSync3(cfgPath)) {
+  const cfgPath = path5.join(homedir2(), ".claude.json");
+  if (!existsSync2(cfgPath)) {
     return {
       ok: false,
       folder,
@@ -21896,7 +21933,7 @@ async function check8(folder) {
     };
   }
   try {
-    const raw = readFileSync2(cfgPath, "utf8");
+    const raw = readFileSync(cfgPath, "utf8");
     const data = JSON.parse(raw);
     const projects = data.projects ?? {};
     const trusted = projects[folder]?.hasTrustDialogAccepted === true;
@@ -21970,14 +22007,14 @@ __export(getSessionLink_exports, {
 // src/registry.ts
 var import_proper_lockfile = __toESM(require_proper_lockfile(), 1);
 import {
-  existsSync as existsSync4,
+  existsSync as existsSync3,
   mkdirSync as mkdirSync3,
-  readFileSync as readFileSync3,
+  readFileSync as readFileSync2,
   renameSync,
   writeFileSync as writeFileSync2
 } from "node:fs";
 import { hostname as hostname2 } from "node:os";
-import path7 from "node:path";
+import path6 from "node:path";
 
 // src/platform.ts
 import { spawn as spawn2 } from "node:child_process";
@@ -22178,16 +22215,16 @@ var EMPTY_STATE = {
 function ensureDataHome() {
   const dir = dataHome();
   mkdirSync3(dir, { recursive: true });
-  mkdirSync3(path7.join(dir, "logs"), { recursive: true });
+  mkdirSync3(path6.join(dir, "logs"), { recursive: true });
 }
 function readState() {
   ensureDataHome();
   const file = stateFilePath();
-  if (!existsSync4(file)) {
+  if (!existsSync3(file)) {
     return structuredClone(EMPTY_STATE);
   }
   try {
-    const raw = readFileSync3(file, "utf8");
+    const raw = readFileSync2(file, "utf8");
     if (raw.trim().length === 0) return structuredClone(EMPTY_STATE);
     const parsed = JSON.parse(raw);
     return StateFileSchema.parse(parsed);
@@ -22212,7 +22249,7 @@ function writeStateAtomic(state) {
 async function mutate(fn) {
   ensureDataHome();
   const file = stateFilePath();
-  if (!existsSync4(file)) {
+  if (!existsSync3(file)) {
     writeStateAtomic(structuredClone(EMPTY_STATE));
   }
   const release = await import_proper_lockfile.default.lock(file, {
@@ -22455,7 +22492,7 @@ __export(mergeBackSession_exports, {
 });
 
 // src/git.ts
-import path8 from "node:path";
+import path7 from "node:path";
 async function isGitRepo(cwd) {
   try {
     const res = await runCommand("git", ["rev-parse", "--is-inside-work-tree"], {
@@ -22596,7 +22633,7 @@ async function abortMergeOrRebase(cwd) {
 }
 function defaultWorktreePath(repoRoot, sessionName) {
   const safe = sessionName.replace(/[^a-zA-Z0-9._-]/g, "-");
-  return path8.join(repoRoot, "..", `${path8.basename(repoRoot)}-${safe}`);
+  return path7.join(repoRoot, "..", `${path7.basename(repoRoot)}-${safe}`);
 }
 
 // src/tools/mergeBackSession.ts
@@ -22698,7 +22735,7 @@ __export(spawnRemote_exports, {
 });
 import { mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2 } from "node:fs";
 import { hostname as hostname4 } from "node:os";
-import path9 from "node:path";
+import path8 from "node:path";
 
 // src/urlTail.ts
 import { closeSync, openSync, readSync } from "node:fs";
@@ -22774,8 +22811,8 @@ async function handler7(raw) {
   const input = SpawnInputSchema.parse(raw);
   const claudeBin = resolveClaudeBin();
   const orchestratorCwd = process.cwd();
-  const absFolder = path9.resolve(orchestratorCwd, input.folder);
-  const sessionName = input.name ?? (path9.basename(absFolder) || "remote-session");
+  const absFolder = path8.resolve(orchestratorCwd, input.folder);
+  const sessionName = input.name ?? (path8.basename(absFolder) || "remote-session");
   let workingDir = absFolder;
   let worktreeBranch = null;
   if (input.spawn_mode === "worktree") {
@@ -22787,7 +22824,7 @@ async function handler7(raw) {
       );
     }
     const repoRoot = await gitTopLevel(orchestratorCwd);
-    workingDir = path9.isAbsolute(input.folder) ? input.folder : defaultWorktreePath(repoRoot, sessionName);
+    workingDir = path8.isAbsolute(input.folder) ? input.folder : defaultWorktreePath(repoRoot, sessionName);
     worktreeBranch = input.worktree_branch ?? `claude/${sessionName}`;
     await worktreeAdd(repoRoot, workingDir, worktreeBranch);
   } else {
@@ -22798,7 +22835,7 @@ async function handler7(raw) {
     const id = generateSessionId(existing);
     return { state, result: id };
   });
-  mkdirSync4(path9.join(dataHome(), "logs"), { recursive: true });
+  mkdirSync4(path8.join(dataHome(), "logs"), { recursive: true });
   const logFile = childLogPath(sessionId);
   const logFd = openSync2(logFile, "a");
   const argv = [];

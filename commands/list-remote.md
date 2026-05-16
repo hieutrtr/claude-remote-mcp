@@ -20,4 +20,4 @@ Render the result as a compact table with columns:
 - `working_dir`
 
 If empty, say "no remote sessions" and remind the user they can spawn one
-with `/spawn-remote <folder>`.
+with `/claude-remote-mcp:spawn-remote <folder>`.
