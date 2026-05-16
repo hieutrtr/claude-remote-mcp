@@ -1,15 +1,19 @@
 # claude-remote-mcp
 
-A Claude Code plugin that lets a running Claude Code session **spawn and
-manage Claude Remote Control sessions** on the local machine, then hand the
+A Claude Code plugin that lets one running Claude Code session **spawn and
+manage Claude Remote Control sessions** on the same machine, then hand the
 URL/QR off to mobile or web so you can keep working from another device.
 
-The plugin handles the things mobile/web cannot do locally: creating folders
-or git worktrees, spawning detached `claude remote-control` processes,
-installing plugins and MCP servers (which the `/plugin` and `/mcp` slash
-commands cannot do from claude.ai/code), and lifecycle/cleanup. Steering the
-session itself (chat, approvals, transcript) stays with mobile/web — this
-plugin deliberately does **not** duplicate that.
+The plugin handles the things mobile and web cannot do locally:
+
+- create folders or git worktrees, optionally `git init` a fresh repo
+- spawn detached `claude remote-control` processes
+- install plugins and MCP servers (the `/plugin` and `/mcp` slash commands are
+  local-only and cannot run from claude.ai/code or mobile)
+- list, stop, and merge-back lifecycle
+
+Steering the spawned session itself — chat, approvals, transcript — stays in
+mobile / web. The plugin deliberately does **not** duplicate that.
 
 See [PRODUCT_BRIEF.md](./PRODUCT_BRIEF.md) for product framing and
 [architecture.md](./architecture.md) for technical details.
@@ -19,10 +23,11 @@ See [PRODUCT_BRIEF.md](./PRODUCT_BRIEF.md) for product framing and
 - **Claude Code >= 2.1.51** (Remote Control requirement). Check with
   `claude --version`.
 - **Node.js >= 20**.
-- Claude Code subscription (Pro/Max; Team/Enterprise need admin to enable
-  the Remote Control toggle).
+- Claude Code subscription (Pro or Max; Team and Enterprise need an admin to
+  enable the Remote Control toggle).
 - Outbound HTTPS to `api.anthropic.com`.
-- API-key auth is **not** supported by Remote Control.
+- API-key auth is **not** supported by Remote Control. The plugin's
+  pre-flight check enforces this.
 
 ## Install
 
@@ -31,15 +36,24 @@ is needed to consume the plugin.
 
 ### Option A — Install via marketplace (recommended)
 
-This repo doubles as a single-plugin marketplace (`.claude-plugin/marketplace.json`).
-In any Claude Code session:
+This repo doubles as a single-plugin marketplace
+(`.claude-plugin/marketplace.json`). In any Claude Code session:
 
 ```text
 /plugin marketplace add hieutrtr/claude-remote-mcp
 /plugin install claude-remote-mcp@hieutrtr
 ```
 
-Restart the session (or run `/reload-plugins`).
+Restart the session, or run `/reload-plugins`.
+
+**Verified end-to-end**: `marketplace add` clones the GitHub repo, reads
+`marketplace.json`, registers a marketplace named `hieutrtr`. `plugin install
+claude-remote-mcp@hieutrtr` copies the plugin to
+`~/.claude/plugins/cache/hieutrtr/claude-remote-mcp/<version>/`, records it
+in `installed_plugins.json` pinned to the published `version` field in
+`plugin.json` (and the git commit SHA as a fallback channel). Installed cache
+is ~1.3 MB, not 90 MB, because an `.npmrc` with `omit=dev` keeps the runtime
+build tools out of the user's cache.
 
 ### Option B — Local dev / test (no install)
 
@@ -47,120 +61,136 @@ For a single session without persisting an install:
 
 ```bash
 git clone https://github.com/hieutrtr/claude-remote-mcp.git
-```
-
-```bash
 claude --plugin-dir /absolute/path/to/claude-remote-mcp
 ```
 
 The `--plugin-dir` flag loads the plugin for that session only. If you also
-have it installed via marketplace, `--plugin-dir` takes precedence.
+have it installed via marketplace, `--plugin-dir` takes precedence for that
+session.
 
 > `claude plugin install` does **not** accept a local path — it only resolves
-> plugins from a marketplace (`name@marketplace` syntax). Use `--plugin-dir`
-> for local-only testing.
+> plugins from a configured marketplace (`name@marketplace` syntax). Use
+> `--plugin-dir` for local-only testing.
 
 ## Quickstart
 
-After install, plugin skills are namespaced as `/claude-remote-mcp:<name>`:
+After install, plugin slash commands are namespaced as
+`/claude-remote-mcp:<name>`:
 
 ```text
 > /claude-remote-mcp:spawn-remote ./migrations name=alembic
 ```
 
-Folder paths resolve against `$CLAUDE_PROJECT_DIR` (the directory you launched
-`claude` from), **not** the plugin install location. So `./migrations` always
-lands inside your project, never inside the plugin cache.
+Folder paths resolve against `$CLAUDE_PROJECT_DIR` — the directory you
+launched `claude` from — **not** the plugin install location. So
+`./migrations` always lands inside your project, never inside the plugin
+cache.
 
-### Fresh git repo per session
+The orchestrator session runs `check_remote_ready` first, then
+`spawn_remote_session`. You get a `https://claude.ai/code/...` URL back; open
+it on your phone or in another browser and keep chatting from there. The
+orchestrator session can close — the spawned child is detached and stays
+alive.
 
-Pass `git_init: true` to make the spawned session's folder its own git repo
-(runs `git init -b main` and creates an empty initial commit after `mkdir`):
-
-```text
-> hãy spawn 1 remote session ở ./demo-project với git_init=true
-```
-
-This is mutually exclusive with `spawn_mode: "worktree"` — a worktree is a
-branch off an existing repo, while `git_init` creates a fresh one.
-
-The orchestrator runs `check_remote_ready` first, then `spawn_remote_session`.
-You get a `https://claude.ai/code/...` URL back; open it on your phone and keep
-chatting from there. The orchestrator session can close — the remote child is
-detached and stays alive.
-
-Other commands:
+Other slash commands:
 
 ```text
-> /claude-remote-mcp:list-remote                     # show alive sessions
+> /claude-remote-mcp:list-remote                     # alive sessions only
 > /claude-remote-mcp:list-remote --all               # include stopped/dead
 > /claude-remote-mcp:stop-remote <session_id_or_pid>
 ```
 
-You can also describe the intent in natural language and Claude will call
-the underlying MCP tools (`spawn_remote_session`, `list_remote_sessions`,
-`stop_remote_session`, `check_remote_ready`, `install_plugin`,
-`install_mcp_server`, `get_session_link`, `merge_back_session`) directly.
+You can also describe intent in natural language and Claude will call the
+underlying MCP tools directly — `spawn_remote_session`,
+`list_remote_sessions`, `stop_remote_session`, `check_remote_ready`,
+`install_plugin`, `install_mcp_server`, `get_session_link`, or
+`merge_back_session`.
+
+### Fresh git repo per session
+
+Pass `git_init: true` to make the spawned session's folder its own git repo.
+After `mkdir -p`, the plugin runs `git init -b <git_init_branch>` (defaults
+to `main`) and creates an empty initial commit so the repo has a HEAD ref:
+
+```text
+> spawn a remote session at ./demo-project with git_init=true
+```
+
+`git_init: true` is mutually exclusive with `spawn_mode: "worktree"` — a
+worktree branches off an existing repo, while `git_init` creates a fresh
+one. Mixing them returns `INVALID_INPUT`.
+
+### Worktree mode
+
+When you want the spawned session to live in a parallel git worktree of your
+current project, pass `spawn_mode: "worktree"`. The plugin runs `git worktree
+add -b claude/<name> <folder>` against the repo at `$CLAUDE_PROJECT_DIR`, so
+the worktree is anchored to **your** project — not the plugin's own git
+history. After the spawned session is done, `merge_back_session` rebases,
+merges, or squash-merges the worktree branch back into your target branch
+and removes the worktree.
 
 ## MCP tools
 
 | Tool | What it does |
 | --- | --- |
-| `check_remote_ready` | Run all pre-flight checks (binary, version, auth, trust, network, state, platform). |
-| `spawn_remote_session` | Create folder/worktree, optionally `git init` for a fresh repo, spawn `claude remote-control` detached, return URL. |
-| `list_remote_sessions` | List tracked sessions, reconciling dead PIDs. |
-| `stop_remote_session` | SIGTERM → SIGKILL fallback. |
-| `get_session_link` | Re-fetch URL/QR for a session. |
-| `install_plugin` | Wrap `claude plugin install` (since `/plugin` is local-only on mobile). |
-| `install_mcp_server` | Wrap `claude mcp add` (since `/mcp` is local-only). |
-| `merge_back_session` | Merge commits from a worktree-mode session back into a target branch. |
+| `check_remote_ready` | Run all pre-flight checks: claude binary present, version `>=2.1.51`, authenticated via claude.ai OAuth (not `oauth_token` or API key), workspace trusted, outbound HTTPS reachable, state dir writable, platform supports detached spawn. |
+| `spawn_remote_session` | Create folder (and optionally `git init`, or a git worktree), spawn `claude remote-control` detached, tail its log for the session URL, register in the cross-session state file, return the URL. |
+| `list_remote_sessions` | List tracked sessions on this host. Reconciles dead PIDs before returning so the listing reflects reality. |
+| `stop_remote_session` | Stop a session by `session_id` or `pid`. SIGTERM → 5 s grace → SIGKILL. |
+| `get_session_link` | Read-only re-fetch of the URL / QR / status for a previously spawned session. |
+| `install_plugin` | Wrapper for `claude plugin install` (the `/plugin` slash command is local-only and cannot be invoked from mobile or web). |
+| `install_mcp_server` | Wrapper for `claude mcp add`. Same rationale as `install_plugin`. Warns when env keys look like secrets. |
+| `merge_back_session` | Merge commits from a worktree-mode session's branch into a target branch (`merge` / `rebase` / `squash`). Returns the conflict list on failure and leaves the repo untouched. |
 
 ## State
 
 The plugin writes state to `~/.claude-remote-mcp/` (or
-`$XDG_STATE_HOME/claude-remote-mcp/`, or `$CLAUDE_REMOTE_MCP_HOME`):
+`$XDG_STATE_HOME/claude-remote-mcp/`, or `$CLAUDE_REMOTE_MCP_HOME` when set):
 
 ```
-state.json       cross-session registry (file-locked)
+state.json       cross-session registry, file-locked
 audit.log        JSONL append-only audit trail
 logs/<sid>.log   stdout of each spawned remote child
 ```
 
-This means a different Claude Code session opened later can see and
-manage sessions spawned earlier.
+This is shared across Claude Code sessions on the same host, so a different
+session opened later can see and manage sessions spawned earlier.
 
 ## Environment variables
 
 | Var | Default | Effect |
 | --- | --- | --- |
-| `CLAUDE_REMOTE_MCP_HOME` | `~/.claude-remote-mcp` | Override data dir. |
-| `CLAUDE_BIN` | resolved from PATH | Override `claude` binary location. |
-| `CLAUDE_REMOTE_MCP_URL_REGEX` | `https://claude\.ai/code/\S+` | Override URL parse regex. |
-| `CLAUDE_REMOTE_MCP_URL_TIMEOUT_MS` | `30000` | URL-tail timeout. |
-| `CLAUDE_REMOTE_MCP_VERBOSE` | `false` | Verbose stderr logging. |
+| `CLAUDE_PROJECT_DIR` | set by Claude Code | Project root used to resolve relative `folder` inputs and to locate the parent repo for worktree mode. The plugin reads this, not `process.cwd()`. |
+| `CLAUDE_REMOTE_MCP_HOME` | `~/.claude-remote-mcp` | Override the data directory. |
+| `CLAUDE_BIN` | resolved from PATH | Override the `claude` binary location. |
+| `CLAUDE_REMOTE_MCP_URL_REGEX` | `https://claude\.ai/code/\S+` | Override the URL-parse regex if the upstream output format changes. |
+| `CLAUDE_REMOTE_MCP_URL_TIMEOUT_MS` | `30000` | Timeout when tailing the child log for the session URL. |
+| `CLAUDE_REMOTE_MCP_VERBOSE` | `false` | Verbose stderr logging from the MCP server. |
 
 ## Development
 
 ```bash
-npm install --include=dev  # one-time, get build/test deps
-npm run build              # typecheck + esbuild bundle to dist/server.js
-npm run typecheck          # tsc --noEmit only
-npm test                   # vitest (22 tests)
-bash scripts/smoke.sh      # end-to-end MCP stdio smoke
+npm install --include=dev    # one-time, get build and test deps
+npm run build                # typecheck + esbuild bundle to dist/server.js
+npm run typecheck            # tsc --noEmit only
+npm test                     # vitest (25 tests)
+bash scripts/smoke.sh        # end-to-end MCP stdio smoke
 ```
 
-> The `--include=dev` flag is needed because `.npmrc` sets `omit=dev`
-> (which prevents `claude plugin install` from pulling ~90MB of build
-> tooling into every user's plugin cache). Without it, `npm install`
-> skips devDependencies and the build will fail.
+> `--include=dev` is required because `.npmrc` sets `omit=dev` to keep
+> `claude plugin install` from pulling ~90 MB of build tooling into every
+> user's plugin cache. Without the override, `npm install` skips
+> devDependencies and the build will fail.
 
-The build produces a single self-contained `dist/server.js` (≈ 760KB) with
-all runtime dependencies inlined. The bundle is committed so consumers
-don't need to install dev tools.
+The build produces a single self-contained `dist/server.js` (~760 KB) with
+all runtime dependencies inlined. The bundle is committed so consumers don't
+need to install dev tools.
 
-22 tests cover paths, platform helpers, error model, file-locked registry
-(including 100 parallel writes), URL tailer, and end-to-end spawn/list/stop
-against a fake `claude` binary.
+The 25 tests cover paths, platform helpers, error model, file-locked registry
+(including 100 parallel writes), URL tailer, end-to-end spawn/list/stop
+against a fake `claude` binary, the `CLAUDE_PROJECT_DIR` path-resolution fix,
+and the `git_init` flow.
 
 ## Layout
 
@@ -169,21 +199,21 @@ against a fake `claude` binary.
   plugin.json         Claude Code plugin manifest
   marketplace.json    single-plugin marketplace catalog
 dist/
-  server.js           bundled MCP server (committed, no build needed by consumers)
+  server.js           bundled MCP server (committed; no build needed by consumers)
+commands/             3 namespaced slash commands (spawn / list / stop)
 src/
   server.ts           MCP stdio entry
-  paths.ts            data dir resolution
+  paths.ts            data dir resolution + CLAUDE_PROJECT_DIR
   platform.ts         detach / pidAlive / gracefulKill
   registry.ts         state.json read/write with file lock
   audit.ts            JSONL audit log
-  claudeCli.ts        wrapper around `claude` binary
-  git.ts              worktree + merge/rebase/squash helpers
-  urlTail.ts          poll log file for Remote Control URL
+  claudeCli.ts        wrapper around the `claude` binary
+  git.ts              worktree + merge/rebase/squash + git init helpers
+  urlTail.ts          poll log file for the Remote Control URL
   errors.ts           CrmError + ErrorCodes
   types.ts            Zod schemas
   preflight/          7 readiness checks
   tools/              8 MCP tools
-commands/             3 slash commands (spawn / list / stop)
 test/unit/            5 unit test files
 test/integration/     spawn integration with fake binary
 tasks/                roadmap referencing ARCH-x.y sections
