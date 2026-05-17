@@ -22185,7 +22185,8 @@ var SpawnInputSchema = external_exports.object({
   initial_prompt: external_exports.string().optional(),
   tags: external_exports.array(external_exports.string()).default([]),
   git_init: external_exports.boolean().default(true),
-  git_init_branch: external_exports.string().default("main")
+  git_init_branch: external_exports.string().default("main"),
+  dangerously_skip_permissions: external_exports.boolean().default(true)
 });
 var ListInputSchema = external_exports.object({
   filter_tags: external_exports.array(external_exports.string()).optional(),
@@ -22919,7 +22920,8 @@ var definition7 = {
       initial_prompt: { type: "string", description: 'Optional opening prompt; uses `claude --remote-control "<prompt>"` form when provided.' },
       tags: { type: "array", items: { type: "string" }, default: [] },
       git_init: { type: "boolean", description: "After mkdir, run `git init -b <branch>` and create an empty initial commit so the session starts with its own clean repo. Defaults to true. Silently ignored for spawn_mode=worktree (which branches off an existing repo).", default: true },
-      git_init_branch: { type: "string", description: "Branch name passed to `git init -b` when git_init is true.", default: "main" }
+      git_init_branch: { type: "string", description: "Branch name passed to `git init -b` when git_init is true.", default: "main" },
+      dangerously_skip_permissions: { type: "boolean", description: "Pass `--dangerously-skip-permissions` to the spawned `claude` process so the remote session never prompts for tool approval. Defaults to true \u2014 remote sessions are designed to be driven from mobile/web where tapping approve is painful. Pass false to keep the standard permission flow.", default: true }
     },
     required: ["folder"],
     additionalProperties: false
@@ -22987,6 +22989,9 @@ async function handler7(raw) {
   const logFile = childLogPath(sessionId);
   const logFd = openSync2(logFile, "a");
   const argv = [];
+  if (input.dangerously_skip_permissions) {
+    argv.push("--dangerously-skip-permissions");
+  }
   if (input.initial_prompt) {
     argv.push("--remote-control", input.initial_prompt);
   } else {
@@ -23147,7 +23152,7 @@ async function main() {
   const server = new Server(
     {
       name: "claude-remote-mcp",
-      version: "0.1.1"
+      version: "0.1.2"
     },
     {
       capabilities: {

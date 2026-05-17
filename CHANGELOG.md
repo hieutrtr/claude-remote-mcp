@@ -2,6 +2,19 @@
 
 All notable changes to claude-remote-mcp.
 
+## 0.1.2 — 2026-05-17
+
+- **change**: `spawn_remote_session` now passes
+  `--dangerously-skip-permissions` to the spawned `claude` process by
+  default. Remote sessions are driven from mobile or web where tapping
+  approve on every tool call is painful — defaulting to autonomous
+  execution matches the actual use case. Pass
+  `dangerously_skip_permissions: false` to keep the standard prompt
+  flow per session.
+- **add**: `scripts/bump.sh <version>` updates the version in all three
+  source-of-truth files (plugin.json, package.json, src/server.ts) and
+  rebuilds the bundle, so future releases can't silently drift again.
+
 ## 0.1.1 — 2026-05-17
 
 - **fix**: `spawn_remote_session` now expands a leading `~` (e.g.

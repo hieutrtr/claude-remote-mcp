@@ -1,6 +1,6 @@
 {
   "name": "claude-remote-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Spawn and manage Claude Remote Control sessions from inside a Claude Code session.",
   "license": "MIT",
   "type": "module",

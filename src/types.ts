@@ -42,6 +42,7 @@ export const SpawnInputSchema = z.object({
   tags: z.array(z.string()).default([]),
   git_init: z.boolean().default(true),
   git_init_branch: z.string().default("main"),
+  dangerously_skip_permissions: z.boolean().default(true),
 });
 export type SpawnInput = z.infer<typeof SpawnInputSchema>;
 

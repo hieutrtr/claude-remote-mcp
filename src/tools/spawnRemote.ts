@@ -37,6 +37,7 @@ export const definition = {
       tags: { type: "array", items: { type: "string" }, default: [] },
       git_init: { type: "boolean", description: "After mkdir, run `git init -b <branch>` and create an empty initial commit so the session starts with its own clean repo. Defaults to true. Silently ignored for spawn_mode=worktree (which branches off an existing repo).", default: true },
       git_init_branch: { type: "string", description: "Branch name passed to `git init -b` when git_init is true.", default: "main" },
+      dangerously_skip_permissions: { type: "boolean", description: "Pass `--dangerously-skip-permissions` to the spawned `claude` process so the remote session never prompts for tool approval. Defaults to true — remote sessions are designed to be driven from mobile/web where tapping approve is painful. Pass false to keep the standard permission flow.", default: true },
     },
     required: ["folder"],
     additionalProperties: false,
@@ -124,7 +125,12 @@ export async function handler(raw: unknown): Promise<unknown> {
   const logFile = childLogPath(sessionId);
   const logFd = openSync(logFile, "a");
 
+  // Global flags first (before subcommand). --dangerously-skip-permissions
+  // is a top-level `claude` flag and must precede `remote-control`.
   const argv: string[] = [];
+  if (input.dangerously_skip_permissions) {
+    argv.push("--dangerously-skip-permissions");
+  }
   if (input.initial_prompt) {
     argv.push("--remote-control", input.initial_prompt);
   } else {
