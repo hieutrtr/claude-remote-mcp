@@ -81,27 +81,39 @@ After install, plugin slash commands are namespaced as
 > /claude-remote-mcp:spawn-remote ./migrations name=alembic
 ```
 
-Folder paths resolve against the orchestrator project directory — the
-directory you launched `claude` from — **not** the plugin install
-location. So `./migrations` always lands inside your project, never inside
-the plugin cache.
+**Absolute paths** (e.g. `/Users/you/myproject/demo`) bypass project-dir
+resolution entirely for same-dir and session modes — they always land
+exactly where you specify. Use them when you want a guarantee.
 
-Resolution order (first non-empty wins):
+**Relative paths** (e.g. `./demo`) resolve against the orchestrator
+project directory, which the plugin determines through this chain
+(first match that does NOT point inside the plugin install cache wins):
 
 1. `CLAUDE_REMOTE_MCP_PROJECT_DIR` — explicit user override.
 2. `CLAUDE_PROJECT_DIR` — set by Claude Code for MCP server subprocesses.
-3. MCP `roots/list` request to the client (when the client advertises the
-   roots capability).
+3. MCP `roots/list` request, when the client advertises the roots
+   capability.
 4. `$PWD` — the shell launcher's working directory.
-5. `process.cwd()` — last resort. The spawn response includes a warning
-   in this case if `process.cwd()` points inside the plugin install
-   cache, so you can spot the misconfiguration immediately.
+5. `process.cwd()` — last resort.
 
-The spawn response surfaces the resolution as `project_dir_used` and
-`project_dir_source`, and `check_remote_ready` exposes the same under
-`orchestrator_project_dir`. If those fields look wrong, set
-`CLAUDE_REMOTE_MCP_PROJECT_DIR` to the absolute path of your project
-root.
+Any entry that resolves to a path inside `~/.claude/plugins/cache/...`
+is **rejected**, not silently used — the only ways the plugin will ever
+mkdir into the plugin cache is if you pass an absolute path under it on
+purpose. If every strategy fails, `spawn_remote_session` returns
+`INVALID_INPUT` with a list of all attempted sources and the reason each
+was rejected, instead of silently creating files in the wrong place.
+
+The spawn response includes `project_dir_used` and `project_dir_source`,
+and `check_remote_ready` exposes the same under
+`orchestrator_project_dir`, so misconfiguration is immediately visible.
+
+If resolution fails on your machine, set the override before launching
+`claude`:
+
+```bash
+export CLAUDE_REMOTE_MCP_PROJECT_DIR="$PWD"
+claude
+```
 
 The orchestrator session runs `check_remote_ready` first, then
 `spawn_remote_session`. You get a `https://claude.ai/code/...` URL back; open

@@ -12,7 +12,7 @@ import {
   worktreeAdd,
 } from "../git.js";
 import { spawnDetached } from "../platform.js";
-import { childLogPath, dataHome, orchestratorProjectDir } from "../paths.js";
+import { childLogPath, dataHome, orchestratorProjectDir, resolveOrchestratorProjectDir } from "../paths.js";
 import {
   type SessionEntry,
   type SpawnInput,
@@ -46,10 +46,31 @@ export const definition = {
 export async function handler(raw: unknown): Promise<unknown> {
   const input = SpawnInputSchema.parse(raw);
   const claudeBin = resolveClaudeBin();
-  const resolved = await orchestratorProjectDir();
-  const projectDir = resolved.dir;
 
-  const absFolder = path.resolve(projectDir, input.folder);
+  const needsProjectDir = !path.isAbsolute(input.folder) || input.spawn_mode === "worktree";
+  let projectDir: string | null = null;
+  let projectDirSource: string = "not-needed";
+  let projectDirAttempts: unknown = undefined;
+
+  if (needsProjectDir) {
+    const resolved = await resolveOrchestratorProjectDir();
+    projectDirAttempts = resolved.attempts;
+    if (!resolved.resolved) {
+      throw new CrmError(
+        ErrorCodes.INVALID_INPUT,
+        path.isAbsolute(input.folder)
+          ? `spawn_mode=worktree needs the orchestrator project dir but none could be resolved. Pass CLAUDE_REMOTE_MCP_PROJECT_DIR or run claude from inside your repo.`
+          : `Cannot resolve a project directory to anchor "${input.folder}". Pass an absolute folder path, or set CLAUDE_REMOTE_MCP_PROJECT_DIR (e.g. \`export CLAUDE_REMOTE_MCP_PROJECT_DIR="$PWD"\` before launching claude).`,
+        { details: { attempts: resolved.attempts, folder: input.folder, spawn_mode: input.spawn_mode } },
+      );
+    }
+    projectDir = resolved.resolved.dir;
+    projectDirSource = resolved.resolved.source;
+  }
+
+  const absFolder = path.isAbsolute(input.folder)
+    ? input.folder
+    : path.resolve(projectDir as string, input.folder);
   const sessionName = input.name ?? (path.basename(absFolder) || "remote-session");
 
   let workingDir = absFolder;
@@ -59,20 +80,21 @@ export async function handler(raw: unknown): Promise<unknown> {
     // git_init is silently ignored: a worktree branches off an existing repo
     // and has no `.git` to init. We do NOT error here because git_init now
     // defaults to true, so every worktree spawn would otherwise fail.
-    if (!(await isGitRepo(projectDir))) {
+    const anchor = projectDir as string;
+    if (!(await isGitRepo(anchor))) {
       throw new CrmError(
         ErrorCodes.NOT_A_GIT_REPO,
-        `spawn_mode=worktree requires the orchestrator project dir to be inside a git repo. Tried: ${projectDir} (resolved via ${resolved.source})`,
+        `spawn_mode=worktree requires the orchestrator project dir to be inside a git repo. Tried: ${anchor} (resolved via ${projectDirSource})`,
         {
           details: {
-            project_dir: projectDir,
-            project_dir_source: resolved.source,
-            warning: resolved.warning,
+            project_dir: anchor,
+            project_dir_source: projectDirSource,
+            attempts: projectDirAttempts,
           },
         },
       );
     }
-    const repoRoot = await gitTopLevel(projectDir);
+    const repoRoot = await gitTopLevel(anchor);
     workingDir = path.isAbsolute(input.folder)
       ? input.folder
       : defaultWorktreePath(repoRoot, sessionName);
@@ -174,14 +196,13 @@ export async function handler(raw: unknown): Promise<unknown> {
     folder: workingDir,
     spawn_mode: input.spawn_mode,
     project_dir: projectDir,
-    project_dir_source: resolved.source,
+    project_dir_source: projectDirSource,
   });
 
   return {
     ...entry,
     project_dir_used: projectDir,
-    project_dir_source: resolved.source,
-    ...(resolved.warning ? { project_dir_warning: resolved.warning } : {}),
+    project_dir_source: projectDirSource,
   };
 }
 

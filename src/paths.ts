@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import path from "node:path";
+import { CrmError, ErrorCodes } from "./errors.js";
 
 export function dataHome(): string {
   const override = process.env["CLAUDE_REMOTE_MCP_HOME"];
@@ -29,19 +30,21 @@ export function lockFilePath(): string {
 }
 
 /**
- * The user's project root, as exposed by Claude Code via the
- * CLAUDE_PROJECT_DIR env var (same value passed to hooks). Used so that
- * relative `folder` inputs resolve against the orchestrator's actual project
- * directory rather than the MCP server process cwd (which, when the plugin
- * is installed, is the plugin install directory itself — definitely NOT
- * where the user wants worktrees / mkdir to happen).
+ * The user's project root, used as the anchor for resolving relative
+ * `folder` inputs and for locating the parent git repo in worktree mode.
  *
- * Resolution order (first non-empty wins):
+ * Resolution order (first non-empty wins; an entry pointing inside the
+ * plugin install cache is rejected):
+ *
  *   1. CLAUDE_REMOTE_MCP_PROJECT_DIR (explicit user override)
  *   2. CLAUDE_PROJECT_DIR (set by Claude Code for MCP server subprocesses)
- *   3. server.listRoots() via MCP, if a server has been registered
- *   4. PWD env (the shell launcher's cwd; usually correct)
- *   5. process.cwd() (last resort — wrong when plugin is installed)
+ *   3. server.listRoots() via MCP, when the client advertises roots
+ *   4. PWD env (the shell launcher's cwd)
+ *   5. process.cwd(), iff it is NOT inside the plugin install cache
+ *
+ * If every strategy fails, we throw INVALID_INPUT — the alternative is
+ * silently mkdir-ing into ~/.claude/plugins/cache/..., which is never what
+ * the user wants.
  */
 export interface ProjectDirResolved {
   dir: string;
@@ -51,7 +54,6 @@ export interface ProjectDirResolved {
     | "mcp:roots/list"
     | "PWD"
     | "process.cwd()";
-  warning?: string;
 }
 
 type ListRootsFn = () => Promise<{ roots: Array<{ uri: string; name?: string }> }>;
@@ -69,16 +71,42 @@ function envNonEmpty(name: string): string | undefined {
   return v && v.length > 0 ? v : undefined;
 }
 
-function isInsidePluginCache(dir: string): boolean {
+export function isInsidePluginCache(dir: string): boolean {
   return dir.includes("/.claude/plugins/cache/") || dir.includes("\\.claude\\plugins\\cache\\");
 }
 
-export async function orchestratorProjectDir(): Promise<ProjectDirResolved> {
-  const override = envNonEmpty("CLAUDE_REMOTE_MCP_PROJECT_DIR");
-  if (override) return { dir: override, source: "CLAUDE_REMOTE_MCP_PROJECT_DIR" };
+export interface ProjectDirAttempt {
+  source: ProjectDirResolved["source"];
+  dir: string | null;
+  rejected_reason?: string;
+}
 
-  const claudeProjectDir = envNonEmpty("CLAUDE_PROJECT_DIR");
-  if (claudeProjectDir) return { dir: claudeProjectDir, source: "CLAUDE_PROJECT_DIR" };
+export interface ProjectDirOutcome {
+  resolved: ProjectDirResolved | null;
+  attempts: ProjectDirAttempt[];
+}
+
+export async function resolveOrchestratorProjectDir(): Promise<ProjectDirOutcome> {
+  const attempts: ProjectDirAttempt[] = [];
+
+  const tryStatic = (source: ProjectDirResolved["source"], dir: string | undefined) => {
+    if (!dir) {
+      attempts.push({ source, dir: null });
+      return null;
+    }
+    if (isInsidePluginCache(dir)) {
+      attempts.push({ source, dir, rejected_reason: "inside plugin install cache" });
+      return null;
+    }
+    attempts.push({ source, dir });
+    return { source, dir };
+  };
+
+  const a = tryStatic("CLAUDE_REMOTE_MCP_PROJECT_DIR", envNonEmpty("CLAUDE_REMOTE_MCP_PROJECT_DIR"));
+  if (a) return { resolved: a, attempts };
+
+  const b = tryStatic("CLAUDE_PROJECT_DIR", envNonEmpty("CLAUDE_PROJECT_DIR"));
+  if (b) return { resolved: b, attempts };
 
   if (listRootsFn) {
     try {
@@ -88,22 +116,41 @@ export async function orchestratorProjectDir(): Promise<ProjectDirResolved> {
           .map((r) => fileUriToPath(r.uri))
           .filter((p): p is string => typeof p === "string" && p.length > 0);
       }
-      if (cachedRoots[0]) return { dir: cachedRoots[0], source: "mcp:roots/list" };
-    } catch {
-      // client may not support roots — fall through
+      const rootDir = cachedRoots[0];
+      const c = tryStatic("mcp:roots/list", rootDir);
+      if (c) return { resolved: c, attempts };
+    } catch (err) {
+      attempts.push({
+        source: "mcp:roots/list",
+        dir: null,
+        rejected_reason: `client error: ${(err as Error).message}`,
+      });
     }
+  } else {
+    attempts.push({ source: "mcp:roots/list", dir: null, rejected_reason: "no client registered" });
   }
 
-  const pwd = envNonEmpty("PWD");
-  if (pwd && !isInsidePluginCache(pwd)) return { dir: pwd, source: "PWD" };
+  const d = tryStatic("PWD", envNonEmpty("PWD"));
+  if (d) return { resolved: d, attempts };
 
-  const cwd = process.cwd();
-  const result: ProjectDirResolved = { dir: cwd, source: "process.cwd()" };
-  if (isInsidePluginCache(cwd)) {
-    result.warning =
-      "process.cwd() is inside the plugin install cache. The MCP client did not provide CLAUDE_PROJECT_DIR or roots/list. Set CLAUDE_REMOTE_MCP_PROJECT_DIR to your project root, or pass an absolute folder path.";
-  }
-  return result;
+  const e = tryStatic("process.cwd()", process.cwd());
+  if (e) return { resolved: e, attempts };
+
+  return { resolved: null, attempts };
+}
+
+/**
+ * Convenience: throws CrmError when no resolution succeeds. Used by tools
+ * that require a project anchor (worktree, relative-path mkdir).
+ */
+export async function orchestratorProjectDir(): Promise<ProjectDirResolved> {
+  const { resolved, attempts } = await resolveOrchestratorProjectDir();
+  if (resolved) return resolved;
+  throw new CrmError(
+    ErrorCodes.INVALID_INPUT,
+    "Cannot determine the orchestrator project directory. The MCP server is running inside the plugin install cache and no usable project path was provided. Pass an absolute folder path, or set CLAUDE_REMOTE_MCP_PROJECT_DIR (e.g. `export CLAUDE_REMOTE_MCP_PROJECT_DIR=\"$PWD\"` before launching `claude`).",
+    { details: { attempts } },
+  );
 }
 
 function fileUriToPath(uri: string): string | null {

@@ -1,4 +1,4 @@
-import { orchestratorProjectDir } from "../paths.js";
+import { resolveOrchestratorProjectDir } from "../paths.js";
 import type { PreflightCheck, PreflightResult } from "../types.js";
 import * as authenticated from "./authenticated.js";
 import * as claudePresent from "./claudePresent.js";
@@ -9,8 +9,9 @@ import * as stateWritable from "./stateWritable.js";
 import * as workspaceTrusted from "./workspaceTrusted.js";
 
 export async function runAllPreflight(folder?: string): Promise<PreflightResult> {
-  const resolved = await orchestratorProjectDir();
-  const wsFolder = folder ?? resolved.dir;
+  const outcome = await resolveOrchestratorProjectDir();
+  const resolved = outcome.resolved;
+  const wsFolder = folder ?? resolved?.dir ?? process.cwd();
   const entries: Array<[string, Promise<PreflightCheck>]> = [
     ["claude_present", claudePresent.check()],
     ["claude_version", claudeVersion.check()],
@@ -25,12 +26,18 @@ export async function runAllPreflight(folder?: string): Promise<PreflightResult>
   for (const [name, p] of entries) {
     checks[name] = await p;
   }
-  const projectDirCheck: PreflightCheck = {
-    ok: resolved.source !== "process.cwd()" || !resolved.warning,
-    value: resolved.dir,
-    method: resolved.source,
-    ...(resolved.warning ? { reason: resolved.warning } : {}),
-  };
+  const projectDirCheck: PreflightCheck = resolved
+    ? {
+        ok: true,
+        value: resolved.dir,
+        method: resolved.source,
+      }
+    : {
+        ok: false,
+        reason:
+          "All project-dir resolution strategies failed. Pass an absolute folder path, or set CLAUDE_REMOTE_MCP_PROJECT_DIR.",
+        value: outcome.attempts as unknown,
+      };
   checks["orchestrator_project_dir"] = projectDirCheck;
   const blocking = Object.entries(checks)
     .filter(([, v]) => !v.ok)

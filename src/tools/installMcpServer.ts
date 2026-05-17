@@ -1,6 +1,6 @@
 import { appendAudit } from "../audit.js";
 import { claudeMcpAdd } from "../claudeCli.js";
-import { orchestratorProjectDir } from "../paths.js";
+import { resolveOrchestratorProjectDir } from "../paths.js";
 import { InstallMcpServerInputSchema } from "../types.js";
 
 const SECRET_KEY = /(KEY|TOKEN|SECRET|PASSWORD|PASS|CRED)/i;
@@ -37,13 +37,15 @@ export async function handler(raw: unknown): Promise<unknown> {
     }
   }
 
+  const resolved = await resolveOrchestratorProjectDir();
+  const cwd = resolved.resolved?.dir ?? process.cwd();
   const res = await claudeMcpAdd({
     name: input.name,
     command: input.command,
     args: input.args,
     env: input.env,
     scope: input.scope,
-    cwd: (await orchestratorProjectDir()).dir,
+    cwd,
   });
 
   appendAudit("mcp_server_installed", {

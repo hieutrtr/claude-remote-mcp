@@ -21648,29 +21648,48 @@ function envNonEmpty(name) {
 function isInsidePluginCache(dir) {
   return dir.includes("/.claude/plugins/cache/") || dir.includes("\\.claude\\plugins\\cache\\");
 }
-async function orchestratorProjectDir() {
-  const override = envNonEmpty("CLAUDE_REMOTE_MCP_PROJECT_DIR");
-  if (override) return { dir: override, source: "CLAUDE_REMOTE_MCP_PROJECT_DIR" };
-  const claudeProjectDir = envNonEmpty("CLAUDE_PROJECT_DIR");
-  if (claudeProjectDir) return { dir: claudeProjectDir, source: "CLAUDE_PROJECT_DIR" };
+async function resolveOrchestratorProjectDir() {
+  const attempts = [];
+  const tryStatic = (source, dir) => {
+    if (!dir) {
+      attempts.push({ source, dir: null });
+      return null;
+    }
+    if (isInsidePluginCache(dir)) {
+      attempts.push({ source, dir, rejected_reason: "inside plugin install cache" });
+      return null;
+    }
+    attempts.push({ source, dir });
+    return { source, dir };
+  };
+  const a = tryStatic("CLAUDE_REMOTE_MCP_PROJECT_DIR", envNonEmpty("CLAUDE_REMOTE_MCP_PROJECT_DIR"));
+  if (a) return { resolved: a, attempts };
+  const b = tryStatic("CLAUDE_PROJECT_DIR", envNonEmpty("CLAUDE_PROJECT_DIR"));
+  if (b) return { resolved: b, attempts };
   if (listRootsFn) {
     try {
       if (cachedRoots === null) {
-        const result2 = await listRootsFn();
-        cachedRoots = result2.roots.map((r) => fileUriToPath(r.uri)).filter((p) => typeof p === "string" && p.length > 0);
+        const result = await listRootsFn();
+        cachedRoots = result.roots.map((r) => fileUriToPath(r.uri)).filter((p) => typeof p === "string" && p.length > 0);
       }
-      if (cachedRoots[0]) return { dir: cachedRoots[0], source: "mcp:roots/list" };
-    } catch {
+      const rootDir = cachedRoots[0];
+      const c = tryStatic("mcp:roots/list", rootDir);
+      if (c) return { resolved: c, attempts };
+    } catch (err) {
+      attempts.push({
+        source: "mcp:roots/list",
+        dir: null,
+        rejected_reason: `client error: ${err.message}`
+      });
     }
+  } else {
+    attempts.push({ source: "mcp:roots/list", dir: null, rejected_reason: "no client registered" });
   }
-  const pwd = envNonEmpty("PWD");
-  if (pwd && !isInsidePluginCache(pwd)) return { dir: pwd, source: "PWD" };
-  const cwd = process.cwd();
-  const result = { dir: cwd, source: "process.cwd()" };
-  if (isInsidePluginCache(cwd)) {
-    result.warning = "process.cwd() is inside the plugin install cache. The MCP client did not provide CLAUDE_PROJECT_DIR or roots/list. Set CLAUDE_REMOTE_MCP_PROJECT_DIR to your project root, or pass an absolute folder path.";
-  }
-  return result;
+  const d = tryStatic("PWD", envNonEmpty("PWD"));
+  if (d) return { resolved: d, attempts };
+  const e = tryStatic("process.cwd()", process.cwd());
+  if (e) return { resolved: e, attempts };
+  return { resolved: null, attempts };
 }
 function fileUriToPath(uri) {
   if (!uri.startsWith("file://")) return uri.length > 0 ? uri : null;
@@ -21994,8 +22013,9 @@ async function check8(folder) {
 
 // src/preflight/index.ts
 async function runAllPreflight(folder) {
-  const resolved = await orchestratorProjectDir();
-  const wsFolder = folder ?? resolved.dir;
+  const outcome = await resolveOrchestratorProjectDir();
+  const resolved = outcome.resolved;
+  const wsFolder = folder ?? resolved?.dir ?? process.cwd();
   const entries = [
     ["claude_present", check3()],
     ["claude_version", check4()],
@@ -22009,11 +22029,14 @@ async function runAllPreflight(folder) {
   for (const [name, p] of entries) {
     checks[name] = await p;
   }
-  const projectDirCheck = {
-    ok: resolved.source !== "process.cwd()" || !resolved.warning,
+  const projectDirCheck = resolved ? {
+    ok: true,
     value: resolved.dir,
-    method: resolved.source,
-    ...resolved.warning ? { reason: resolved.warning } : {}
+    method: resolved.source
+  } : {
+    ok: false,
+    reason: "All project-dir resolution strategies failed. Pass an absolute folder path, or set CLAUDE_REMOTE_MCP_PROJECT_DIR.",
+    value: outcome.attempts
   };
   checks["orchestrator_project_dir"] = projectDirCheck;
   const blocking = Object.entries(checks).filter(([, v]) => !v.ok).map(([k]) => k);
@@ -22433,13 +22456,15 @@ async function handler3(raw) {
       }
     }
   }
+  const resolved = await resolveOrchestratorProjectDir();
+  const cwd = resolved.resolved?.dir ?? process.cwd();
   const res = await claudeMcpAdd({
     name: input.name,
     command: input.command,
     args: input.args,
     env: input.env,
     scope: input.scope,
-    cwd: (await orchestratorProjectDir()).dir
+    cwd
   });
   appendAudit("mcp_server_installed", {
     name: input.name,
@@ -22478,11 +22503,13 @@ var definition4 = {
 };
 async function handler4(raw) {
   const input = InstallPluginInputSchema.parse(raw);
+  const resolved = await resolveOrchestratorProjectDir();
+  const cwd = resolved.resolved?.dir ?? process.cwd();
   const res = await claudePluginInstall({
     plugin: input.plugin,
     scope: input.scope,
     marketplace: input.marketplace,
-    cwd: (await orchestratorProjectDir()).dir
+    cwd
   });
   appendAudit("plugin_installed", {
     plugin: input.plugin,
@@ -22894,27 +22921,43 @@ var definition7 = {
 async function handler7(raw) {
   const input = SpawnInputSchema.parse(raw);
   const claudeBin = resolveClaudeBin();
-  const resolved = await orchestratorProjectDir();
-  const projectDir = resolved.dir;
-  const absFolder = path8.resolve(projectDir, input.folder);
+  const needsProjectDir = !path8.isAbsolute(input.folder) || input.spawn_mode === "worktree";
+  let projectDir = null;
+  let projectDirSource = "not-needed";
+  let projectDirAttempts = void 0;
+  if (needsProjectDir) {
+    const resolved = await resolveOrchestratorProjectDir();
+    projectDirAttempts = resolved.attempts;
+    if (!resolved.resolved) {
+      throw new CrmError(
+        ErrorCodes.INVALID_INPUT,
+        path8.isAbsolute(input.folder) ? `spawn_mode=worktree needs the orchestrator project dir but none could be resolved. Pass CLAUDE_REMOTE_MCP_PROJECT_DIR or run claude from inside your repo.` : `Cannot resolve a project directory to anchor "${input.folder}". Pass an absolute folder path, or set CLAUDE_REMOTE_MCP_PROJECT_DIR (e.g. \`export CLAUDE_REMOTE_MCP_PROJECT_DIR="$PWD"\` before launching claude).`,
+        { details: { attempts: resolved.attempts, folder: input.folder, spawn_mode: input.spawn_mode } }
+      );
+    }
+    projectDir = resolved.resolved.dir;
+    projectDirSource = resolved.resolved.source;
+  }
+  const absFolder = path8.isAbsolute(input.folder) ? input.folder : path8.resolve(projectDir, input.folder);
   const sessionName = input.name ?? (path8.basename(absFolder) || "remote-session");
   let workingDir = absFolder;
   let worktreeBranch = null;
   if (input.spawn_mode === "worktree") {
-    if (!await isGitRepo(projectDir)) {
+    const anchor = projectDir;
+    if (!await isGitRepo(anchor)) {
       throw new CrmError(
         ErrorCodes.NOT_A_GIT_REPO,
-        `spawn_mode=worktree requires the orchestrator project dir to be inside a git repo. Tried: ${projectDir} (resolved via ${resolved.source})`,
+        `spawn_mode=worktree requires the orchestrator project dir to be inside a git repo. Tried: ${anchor} (resolved via ${projectDirSource})`,
         {
           details: {
-            project_dir: projectDir,
-            project_dir_source: resolved.source,
-            warning: resolved.warning
+            project_dir: anchor,
+            project_dir_source: projectDirSource,
+            attempts: projectDirAttempts
           }
         }
       );
     }
-    const repoRoot = await gitTopLevel(projectDir);
+    const repoRoot = await gitTopLevel(anchor);
     workingDir = path8.isAbsolute(input.folder) ? input.folder : defaultWorktreePath(repoRoot, sessionName);
     worktreeBranch = input.worktree_branch ?? `claude/${sessionName}`;
     await worktreeAdd(repoRoot, workingDir, worktreeBranch);
@@ -23008,13 +23051,12 @@ async function handler7(raw) {
     folder: workingDir,
     spawn_mode: input.spawn_mode,
     project_dir: projectDir,
-    project_dir_source: resolved.source
+    project_dir_source: projectDirSource
   });
   return {
     ...entry,
     project_dir_used: projectDir,
-    project_dir_source: resolved.source,
-    ...resolved.warning ? { project_dir_warning: resolved.warning } : {}
+    project_dir_source: projectDirSource
   };
 }
 var __testing__ = { SpawnInputSchema };
