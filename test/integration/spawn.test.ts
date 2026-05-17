@@ -122,6 +122,26 @@ describe("spawn_remote_session integration", () => {
     await gracefulKill(result.pid, 2000);
   });
 
+  it("expands a leading `~` to the user's home directory", async () => {
+    // We point HOME at a tmp dir so the test doesn't pollute the real home.
+    const fakeHome = mkdtempSync(path.join(tmpdir(), "crm-home-"));
+    const prevHome = process.env["HOME"];
+    process.env["HOME"] = fakeHome;
+    try {
+      const result = (await spawnHandler({
+        folder: "~/tilde-test",
+        name: "tilde",
+      })) as { working_dir: string; pid: number };
+      expect(result.working_dir).toBe(path.join(fakeHome, "tilde-test"));
+      expect(existsSync(result.working_dir)).toBe(true);
+      await gracefulKill(result.pid, 2000);
+    } finally {
+      if (prevHome === undefined) delete process.env["HOME"];
+      else process.env["HOME"] = prevHome;
+      rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
   it("worktree mode silently ignores git_init (no .git inside the worktree folder)", async () => {
     // Make a tiny upstream repo so `git worktree add` has something to branch from.
     const upstream = path.join(tmpHome, "upstream");

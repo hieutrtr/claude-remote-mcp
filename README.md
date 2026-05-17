@@ -85,6 +85,11 @@ After install, plugin slash commands are namespaced as
 resolution entirely for same-dir and session modes — they always land
 exactly where you specify. Use them when you want a guarantee.
 
+**Home-relative paths** (e.g. `~/projects/demo` or `~`) are expanded to
+the current user's home directory before any resolution step, so they
+behave the same as absolute paths. (The shell doesn't expand `~` for
+arguments passed to MCP tools, so the plugin does it explicitly.)
+
 **Relative paths** (e.g. `./demo`) resolve against the orchestrator
 project directory, which the plugin determines through this chain
 (first match that does NOT point inside the plugin install cache wins):

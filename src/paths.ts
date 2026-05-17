@@ -162,3 +162,21 @@ function fileUriToPath(uri: string): string | null {
     return null;
   }
 }
+
+/**
+ * Expand a leading `~` or `~/...` to the current user's home directory.
+ * Standalone `~` becomes the home dir; `~/foo` becomes `<home>/foo`. Any
+ * other form (like `~user/foo`) is returned unchanged because we cannot
+ * resolve other users' homes portably without parsing /etc/passwd.
+ *
+ * Critical for `spawn_remote_session`: agents often pass paths like
+ * `~/projects/demo` literally, expecting shell-style expansion. Without
+ * this we would mkdir a folder named `~` inside the project dir.
+ */
+export function expandTilde(p: string): string {
+  if (p === "~") return homedir();
+  if (p.startsWith("~/") || p.startsWith("~\\")) {
+    return path.join(homedir(), p.slice(2));
+  }
+  return p;
+}

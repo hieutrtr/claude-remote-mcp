@@ -21700,6 +21700,13 @@ function fileUriToPath(uri) {
     return null;
   }
 }
+function expandTilde(p) {
+  if (p === "~") return homedir();
+  if (p.startsWith("~/") || p.startsWith("~\\")) {
+    return path.join(homedir(), p.slice(2));
+  }
+  return p;
+}
 
 // src/tools/checkRemoteReady.ts
 var checkRemoteReady_exports = {};
@@ -22921,7 +22928,8 @@ var definition7 = {
 async function handler7(raw) {
   const input = SpawnInputSchema.parse(raw);
   const claudeBin = resolveClaudeBin();
-  const needsProjectDir = !path8.isAbsolute(input.folder) || input.spawn_mode === "worktree";
+  const folderInput = expandTilde(input.folder);
+  const needsProjectDir = !path8.isAbsolute(folderInput) || input.spawn_mode === "worktree";
   let projectDir = null;
   let projectDirSource = "not-needed";
   let projectDirAttempts = void 0;
@@ -22931,14 +22939,14 @@ async function handler7(raw) {
     if (!resolved.resolved) {
       throw new CrmError(
         ErrorCodes.INVALID_INPUT,
-        path8.isAbsolute(input.folder) ? `spawn_mode=worktree needs the orchestrator project dir but none could be resolved. Pass CLAUDE_REMOTE_MCP_PROJECT_DIR or run claude from inside your repo.` : `Cannot resolve a project directory to anchor "${input.folder}". Pass an absolute folder path, or set CLAUDE_REMOTE_MCP_PROJECT_DIR (e.g. \`export CLAUDE_REMOTE_MCP_PROJECT_DIR="$PWD"\` before launching claude).`,
-        { details: { attempts: resolved.attempts, folder: input.folder, spawn_mode: input.spawn_mode } }
+        path8.isAbsolute(folderInput) ? `spawn_mode=worktree needs the orchestrator project dir but none could be resolved. Pass CLAUDE_REMOTE_MCP_PROJECT_DIR or run claude from inside your repo.` : `Cannot resolve a project directory to anchor "${input.folder}". Pass an absolute folder path (including \`~/...\`), or set CLAUDE_REMOTE_MCP_PROJECT_DIR (e.g. \`export CLAUDE_REMOTE_MCP_PROJECT_DIR="$PWD"\` before launching claude).`,
+        { details: { attempts: resolved.attempts, folder: input.folder, folder_expanded: folderInput, spawn_mode: input.spawn_mode } }
       );
     }
     projectDir = resolved.resolved.dir;
     projectDirSource = resolved.resolved.source;
   }
-  const absFolder = path8.isAbsolute(input.folder) ? input.folder : path8.resolve(projectDir, input.folder);
+  const absFolder = path8.isAbsolute(folderInput) ? folderInput : path8.resolve(projectDir, folderInput);
   const sessionName = input.name ?? (path8.basename(absFolder) || "remote-session");
   let workingDir = absFolder;
   let worktreeBranch = null;
@@ -22958,7 +22966,7 @@ async function handler7(raw) {
       );
     }
     const repoRoot = await gitTopLevel(anchor);
-    workingDir = path8.isAbsolute(input.folder) ? input.folder : defaultWorktreePath(repoRoot, sessionName);
+    workingDir = path8.isAbsolute(folderInput) ? folderInput : defaultWorktreePath(repoRoot, sessionName);
     worktreeBranch = input.worktree_branch ?? `claude/${sessionName}`;
     await worktreeAdd(repoRoot, workingDir, worktreeBranch);
   } else {

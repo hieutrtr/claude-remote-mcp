@@ -12,7 +12,7 @@ import {
   worktreeAdd,
 } from "../git.js";
 import { spawnDetached } from "../platform.js";
-import { childLogPath, dataHome, orchestratorProjectDir, resolveOrchestratorProjectDir } from "../paths.js";
+import { childLogPath, dataHome, expandTilde, orchestratorProjectDir, resolveOrchestratorProjectDir } from "../paths.js";
 import {
   type SessionEntry,
   type SpawnInput,
@@ -47,7 +47,11 @@ export async function handler(raw: unknown): Promise<unknown> {
   const input = SpawnInputSchema.parse(raw);
   const claudeBin = resolveClaudeBin();
 
-  const needsProjectDir = !path.isAbsolute(input.folder) || input.spawn_mode === "worktree";
+  // Expand a leading `~` BEFORE deciding whether the path is absolute.
+  // Agents often pass `~/projects/demo` literally; without expansion that
+  // string is considered relative and would land at `<projectDir>/~/...`.
+  const folderInput = expandTilde(input.folder);
+  const needsProjectDir = !path.isAbsolute(folderInput) || input.spawn_mode === "worktree";
   let projectDir: string | null = null;
   let projectDirSource: string = "not-needed";
   let projectDirAttempts: unknown = undefined;
@@ -58,19 +62,19 @@ export async function handler(raw: unknown): Promise<unknown> {
     if (!resolved.resolved) {
       throw new CrmError(
         ErrorCodes.INVALID_INPUT,
-        path.isAbsolute(input.folder)
+        path.isAbsolute(folderInput)
           ? `spawn_mode=worktree needs the orchestrator project dir but none could be resolved. Pass CLAUDE_REMOTE_MCP_PROJECT_DIR or run claude from inside your repo.`
-          : `Cannot resolve a project directory to anchor "${input.folder}". Pass an absolute folder path, or set CLAUDE_REMOTE_MCP_PROJECT_DIR (e.g. \`export CLAUDE_REMOTE_MCP_PROJECT_DIR="$PWD"\` before launching claude).`,
-        { details: { attempts: resolved.attempts, folder: input.folder, spawn_mode: input.spawn_mode } },
+          : `Cannot resolve a project directory to anchor "${input.folder}". Pass an absolute folder path (including \`~/...\`), or set CLAUDE_REMOTE_MCP_PROJECT_DIR (e.g. \`export CLAUDE_REMOTE_MCP_PROJECT_DIR="$PWD"\` before launching claude).`,
+        { details: { attempts: resolved.attempts, folder: input.folder, folder_expanded: folderInput, spawn_mode: input.spawn_mode } },
       );
     }
     projectDir = resolved.resolved.dir;
     projectDirSource = resolved.resolved.source;
   }
 
-  const absFolder = path.isAbsolute(input.folder)
-    ? input.folder
-    : path.resolve(projectDir as string, input.folder);
+  const absFolder = path.isAbsolute(folderInput)
+    ? folderInput
+    : path.resolve(projectDir as string, folderInput);
   const sessionName = input.name ?? (path.basename(absFolder) || "remote-session");
 
   let workingDir = absFolder;
@@ -95,8 +99,8 @@ export async function handler(raw: unknown): Promise<unknown> {
       );
     }
     const repoRoot = await gitTopLevel(anchor);
-    workingDir = path.isAbsolute(input.folder)
-      ? input.folder
+    workingDir = path.isAbsolute(folderInput)
+      ? folderInput
       : defaultWorktreePath(repoRoot, sessionName);
     worktreeBranch = input.worktree_branch ?? `claude/${sessionName}`;
     await worktreeAdd(repoRoot, workingDir, worktreeBranch);

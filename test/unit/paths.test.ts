@@ -1,8 +1,11 @@
+import { homedir } from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   auditLogPath,
   childLogPath,
   dataHome,
+  expandTilde,
   isInsidePluginCache,
   orchestratorProjectDir,
   registerListRoots,
@@ -32,6 +35,16 @@ describe("paths", () => {
     } finally {
       delete process.env["CLAUDE_REMOTE_MCP_HOME"];
     }
+  });
+
+  it("expandTilde expands ~ to home and leaves other paths unchanged", () => {
+    expect(expandTilde("~")).toBe(homedir());
+    expect(expandTilde("~/projects/demo")).toBe(path.join(homedir(), "projects/demo"));
+    expect(expandTilde("/abs/path")).toBe("/abs/path");
+    expect(expandTilde("./relative")).toBe("./relative");
+    expect(expandTilde("relative")).toBe("relative");
+    // ~user/... is not expanded (we can't resolve other users portably)
+    expect(expandTilde("~root/foo")).toBe("~root/foo");
   });
 });
 
