@@ -46,7 +46,8 @@ export const definition = {
 export async function handler(raw: unknown): Promise<unknown> {
   const input = SpawnInputSchema.parse(raw);
   const claudeBin = resolveClaudeBin();
-  const projectDir = orchestratorProjectDir();
+  const resolved = await orchestratorProjectDir();
+  const projectDir = resolved.dir;
 
   const absFolder = path.resolve(projectDir, input.folder);
   const sessionName = input.name ?? (path.basename(absFolder) || "remote-session");
@@ -61,8 +62,14 @@ export async function handler(raw: unknown): Promise<unknown> {
     if (!(await isGitRepo(projectDir))) {
       throw new CrmError(
         ErrorCodes.NOT_A_GIT_REPO,
-        `spawn_mode=worktree requires the orchestrator project dir to be inside a git repo. Tried: ${projectDir}`,
-        { details: { project_dir: projectDir } },
+        `spawn_mode=worktree requires the orchestrator project dir to be inside a git repo. Tried: ${projectDir} (resolved via ${resolved.source})`,
+        {
+          details: {
+            project_dir: projectDir,
+            project_dir_source: resolved.source,
+            warning: resolved.warning,
+          },
+        },
       );
     }
     const repoRoot = await gitTopLevel(projectDir);
@@ -166,9 +173,16 @@ export async function handler(raw: unknown): Promise<unknown> {
     pid: childPid,
     folder: workingDir,
     spawn_mode: input.spawn_mode,
+    project_dir: projectDir,
+    project_dir_source: resolved.source,
   });
 
-  return entry;
+  return {
+    ...entry,
+    project_dir_used: projectDir,
+    project_dir_source: resolved.source,
+    ...(resolved.warning ? { project_dir_warning: resolved.warning } : {}),
+  };
 }
 
 export const __testing__ = { SpawnInputSchema };

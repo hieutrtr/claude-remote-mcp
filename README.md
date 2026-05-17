@@ -81,10 +81,27 @@ After install, plugin slash commands are namespaced as
 > /claude-remote-mcp:spawn-remote ./migrations name=alembic
 ```
 
-Folder paths resolve against `$CLAUDE_PROJECT_DIR` — the directory you
-launched `claude` from — **not** the plugin install location. So
-`./migrations` always lands inside your project, never inside the plugin
-cache.
+Folder paths resolve against the orchestrator project directory — the
+directory you launched `claude` from — **not** the plugin install
+location. So `./migrations` always lands inside your project, never inside
+the plugin cache.
+
+Resolution order (first non-empty wins):
+
+1. `CLAUDE_REMOTE_MCP_PROJECT_DIR` — explicit user override.
+2. `CLAUDE_PROJECT_DIR` — set by Claude Code for MCP server subprocesses.
+3. MCP `roots/list` request to the client (when the client advertises the
+   roots capability).
+4. `$PWD` — the shell launcher's working directory.
+5. `process.cwd()` — last resort. The spawn response includes a warning
+   in this case if `process.cwd()` points inside the plugin install
+   cache, so you can spot the misconfiguration immediately.
+
+The spawn response surfaces the resolution as `project_dir_used` and
+`project_dir_source`, and `check_remote_ready` exposes the same under
+`orchestrator_project_dir`. If those fields look wrong, set
+`CLAUDE_REMOTE_MCP_PROJECT_DIR` to the absolute path of your project
+root.
 
 The orchestrator session runs `check_remote_ready` first, then
 `spawn_remote_session`. You get a `https://claude.ai/code/...` URL back; open
@@ -167,6 +184,7 @@ session opened later can see and manage sessions spawned earlier.
 
 | Var | Default | Effect |
 | --- | --- | --- |
+| `CLAUDE_REMOTE_MCP_PROJECT_DIR` | unset | **Force-override** the orchestrator project root. Use this if `working_dir` in the spawn response shows the plugin install cache (`~/.claude/plugins/cache/...`) instead of your project. |
 | `CLAUDE_PROJECT_DIR` | set by Claude Code | Project root used to resolve relative `folder` inputs and to locate the parent repo for worktree mode. The plugin reads this, not `process.cwd()`. |
 | `CLAUDE_REMOTE_MCP_HOME` | `~/.claude-remote-mcp` | Override the data directory. |
 | `CLAUDE_BIN` | resolved from PATH | Override the `claude` binary location. |

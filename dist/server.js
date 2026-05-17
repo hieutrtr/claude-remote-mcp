@@ -21610,18 +21610,6 @@ function isCrmError(err) {
   return err instanceof CrmError;
 }
 
-// src/tools/checkRemoteReady.ts
-var checkRemoteReady_exports = {};
-__export(checkRemoteReady_exports, {
-  InputSchema: () => InputSchema,
-  definition: () => definition,
-  handler: () => handler
-});
-
-// src/audit.ts
-import { appendFileSync, mkdirSync } from "node:fs";
-import path2 from "node:path";
-
 // src/paths.ts
 import { homedir } from "node:os";
 import path from "node:path";
@@ -21647,13 +21635,64 @@ function childLogPath(sessionId) {
 function lockFilePath() {
   return `${stateFilePath()}.lock`;
 }
-function orchestratorProjectDir() {
-  const fromEnv = process.env["CLAUDE_PROJECT_DIR"];
-  if (fromEnv && fromEnv.length > 0) return fromEnv;
-  return process.cwd();
+var listRootsFn = null;
+var cachedRoots = null;
+function registerListRoots(fn) {
+  listRootsFn = fn;
+  cachedRoots = null;
+}
+function envNonEmpty(name) {
+  const v = process.env[name];
+  return v && v.length > 0 ? v : void 0;
+}
+function isInsidePluginCache(dir) {
+  return dir.includes("/.claude/plugins/cache/") || dir.includes("\\.claude\\plugins\\cache\\");
+}
+async function orchestratorProjectDir() {
+  const override = envNonEmpty("CLAUDE_REMOTE_MCP_PROJECT_DIR");
+  if (override) return { dir: override, source: "CLAUDE_REMOTE_MCP_PROJECT_DIR" };
+  const claudeProjectDir = envNonEmpty("CLAUDE_PROJECT_DIR");
+  if (claudeProjectDir) return { dir: claudeProjectDir, source: "CLAUDE_PROJECT_DIR" };
+  if (listRootsFn) {
+    try {
+      if (cachedRoots === null) {
+        const result2 = await listRootsFn();
+        cachedRoots = result2.roots.map((r) => fileUriToPath(r.uri)).filter((p) => typeof p === "string" && p.length > 0);
+      }
+      if (cachedRoots[0]) return { dir: cachedRoots[0], source: "mcp:roots/list" };
+    } catch {
+    }
+  }
+  const pwd = envNonEmpty("PWD");
+  if (pwd && !isInsidePluginCache(pwd)) return { dir: pwd, source: "PWD" };
+  const cwd = process.cwd();
+  const result = { dir: cwd, source: "process.cwd()" };
+  if (isInsidePluginCache(cwd)) {
+    result.warning = "process.cwd() is inside the plugin install cache. The MCP client did not provide CLAUDE_PROJECT_DIR or roots/list. Set CLAUDE_REMOTE_MCP_PROJECT_DIR to your project root, or pass an absolute folder path.";
+  }
+  return result;
+}
+function fileUriToPath(uri) {
+  if (!uri.startsWith("file://")) return uri.length > 0 ? uri : null;
+  try {
+    const u = new URL(uri);
+    return decodeURIComponent(u.pathname);
+  } catch {
+    return null;
+  }
 }
 
+// src/tools/checkRemoteReady.ts
+var checkRemoteReady_exports = {};
+__export(checkRemoteReady_exports, {
+  InputSchema: () => InputSchema,
+  definition: () => definition,
+  handler: () => handler
+});
+
 // src/audit.ts
+import { appendFileSync, mkdirSync } from "node:fs";
+import path2 from "node:path";
 function appendAudit(event, data = {}) {
   const file = auditLogPath();
   mkdirSync(path2.dirname(file), { recursive: true });
@@ -21955,7 +21994,8 @@ async function check8(folder) {
 
 // src/preflight/index.ts
 async function runAllPreflight(folder) {
-  const wsFolder = folder ?? process.cwd();
+  const resolved = await orchestratorProjectDir();
+  const wsFolder = folder ?? resolved.dir;
   const entries = [
     ["claude_present", check3()],
     ["claude_version", check4()],
@@ -21969,6 +22009,13 @@ async function runAllPreflight(folder) {
   for (const [name, p] of entries) {
     checks[name] = await p;
   }
+  const projectDirCheck = {
+    ok: resolved.source !== "process.cwd()" || !resolved.warning,
+    value: resolved.dir,
+    method: resolved.source,
+    ...resolved.warning ? { reason: resolved.warning } : {}
+  };
+  checks["orchestrator_project_dir"] = projectDirCheck;
   const blocking = Object.entries(checks).filter(([, v]) => !v.ok).map(([k]) => k);
   return {
     ok: blocking.length === 0,
@@ -22392,7 +22439,7 @@ async function handler3(raw) {
     args: input.args,
     env: input.env,
     scope: input.scope,
-    cwd: process.cwd()
+    cwd: (await orchestratorProjectDir()).dir
   });
   appendAudit("mcp_server_installed", {
     name: input.name,
@@ -22435,7 +22482,7 @@ async function handler4(raw) {
     plugin: input.plugin,
     scope: input.scope,
     marketplace: input.marketplace,
-    cwd: process.cwd()
+    cwd: (await orchestratorProjectDir()).dir
   });
   appendAudit("plugin_installed", {
     plugin: input.plugin,
@@ -22847,7 +22894,8 @@ var definition7 = {
 async function handler7(raw) {
   const input = SpawnInputSchema.parse(raw);
   const claudeBin = resolveClaudeBin();
-  const projectDir = orchestratorProjectDir();
+  const resolved = await orchestratorProjectDir();
+  const projectDir = resolved.dir;
   const absFolder = path8.resolve(projectDir, input.folder);
   const sessionName = input.name ?? (path8.basename(absFolder) || "remote-session");
   let workingDir = absFolder;
@@ -22856,8 +22904,14 @@ async function handler7(raw) {
     if (!await isGitRepo(projectDir)) {
       throw new CrmError(
         ErrorCodes.NOT_A_GIT_REPO,
-        `spawn_mode=worktree requires the orchestrator project dir to be inside a git repo. Tried: ${projectDir}`,
-        { details: { project_dir: projectDir } }
+        `spawn_mode=worktree requires the orchestrator project dir to be inside a git repo. Tried: ${projectDir} (resolved via ${resolved.source})`,
+        {
+          details: {
+            project_dir: projectDir,
+            project_dir_source: resolved.source,
+            warning: resolved.warning
+          }
+        }
       );
     }
     const repoRoot = await gitTopLevel(projectDir);
@@ -22952,9 +23006,16 @@ async function handler7(raw) {
     session_id: sessionId,
     pid: childPid,
     folder: workingDir,
-    spawn_mode: input.spawn_mode
+    spawn_mode: input.spawn_mode,
+    project_dir: projectDir,
+    project_dir_source: resolved.source
   });
-  return entry;
+  return {
+    ...entry,
+    project_dir_used: projectDir,
+    project_dir_source: resolved.source,
+    ...resolved.warning ? { project_dir_warning: resolved.warning } : {}
+  };
 }
 var __testing__ = { SpawnInputSchema };
 
@@ -23099,6 +23160,13 @@ async function main() {
         ]
       };
     }
+  });
+  registerListRoots(async () => {
+    const caps = server.getClientCapabilities();
+    if (!caps || !caps["roots"]) {
+      throw new Error("client does not advertise roots capability");
+    }
+    return server.listRoots();
   });
   const transport = new StdioServerTransport();
   await server.connect(transport);

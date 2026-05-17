@@ -6,6 +6,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { isCrmError } from "./errors.js";
+import { registerListRoots } from "./paths.js";
 import * as checkRemoteReady from "./tools/checkRemoteReady.js";
 import * as getSessionLink from "./tools/getSessionLink.js";
 import * as installMcpServer from "./tools/installMcpServer.js";
@@ -114,6 +115,14 @@ async function main(): Promise<void> {
         ],
       };
     }
+  });
+
+  registerListRoots(async () => {
+    const caps = server.getClientCapabilities();
+    if (!caps || !caps["roots"]) {
+      throw new Error("client does not advertise roots capability");
+    }
+    return server.listRoots();
   });
 
   const transport = new StdioServerTransport();

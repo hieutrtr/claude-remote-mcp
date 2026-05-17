@@ -1,5 +1,6 @@
 import { appendAudit } from "../audit.js";
 import { claudePluginInstall } from "../claudeCli.js";
+import { orchestratorProjectDir } from "../paths.js";
 import { InstallPluginInputSchema } from "../types.js";
 
 export const definition = {
@@ -24,7 +25,7 @@ export async function handler(raw: unknown): Promise<unknown> {
     plugin: input.plugin,
     scope: input.scope,
     marketplace: input.marketplace,
-    cwd: process.cwd(),
+    cwd: (await orchestratorProjectDir()).dir,
   });
   appendAudit("plugin_installed", {
     plugin: input.plugin,
