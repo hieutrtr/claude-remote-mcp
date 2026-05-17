@@ -106,19 +106,25 @@ underlying MCP tools directly — `spawn_remote_session`,
 `install_plugin`, `install_mcp_server`, `get_session_link`, or
 `merge_back_session`.
 
-### Fresh git repo per session
+### Fresh git repo per session (default)
 
-Pass `git_init: true` to make the spawned session's folder its own git repo.
-After `mkdir -p`, the plugin runs `git init -b <git_init_branch>` (defaults
-to `main`) and creates an empty initial commit so the repo has a HEAD ref:
+`git_init` defaults to **`true`**. After `mkdir -p`, the plugin runs
+`git init -b <git_init_branch>` (defaults to `main`) and creates an empty
+initial commit so the spawned session has its own clean repo with a HEAD
+ref out of the gate. Without this, the Claude mobile app would attach the
+session to whatever ambient git context it could guess at.
+
+If the target folder is already a git repo, init is skipped.
+
+Pass `git_init: false` to opt out:
 
 ```text
-> spawn a remote session at ./demo-project with git_init=true
+> spawn a remote session at ./shared-folder with git_init=false
 ```
 
-`git_init: true` is mutually exclusive with `spawn_mode: "worktree"` — a
-worktree branches off an existing repo, while `git_init` creates a fresh
-one. Mixing them returns `INVALID_INPUT`.
+`git_init` is **silently ignored** when `spawn_mode: "worktree"` — a
+worktree branches off an existing repo and has no `.git` of its own to
+init.
 
 ### Worktree mode
 

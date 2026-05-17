@@ -1,7 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "claude-remote-mcp",
-  "version": "0.1.0",
   "description": "Spawn and manage Claude Remote Control sessions from inside a Claude Code session.",
   "author": {
     "name": "hieutrtr",

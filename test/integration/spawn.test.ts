@@ -122,14 +122,36 @@ describe("spawn_remote_session integration", () => {
     await gracefulKill(result.pid, 2000);
   });
 
-  it("git_init=true is rejected with spawn_mode=worktree", async () => {
-    await expect(
-      spawnHandler({
-        folder: path.join(tmpHome, "x"),
+  it("worktree mode silently ignores git_init (no .git inside the worktree folder)", async () => {
+    // Make a tiny upstream repo so `git worktree add` has something to branch from.
+    const upstream = path.join(tmpHome, "upstream");
+    await runCommand("git", ["init", "-b", "main", upstream], {
+      timeoutMs: 5000,
+    });
+    await runCommand(
+      "git",
+      ["commit", "--allow-empty", "-m", "root"],
+      { cwd: upstream, timeoutMs: 5000 },
+    );
+
+    const prevProj = process.env["CLAUDE_PROJECT_DIR"];
+    process.env["CLAUDE_PROJECT_DIR"] = upstream;
+    try {
+      const result = (await spawnHandler({
+        folder: path.join(tmpHome, "wt-target"),
         spawn_mode: "worktree",
+        name: "wt-test",
         git_init: true,
-      }),
-    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+      })) as { working_dir: string; spawn_mode: string; pid: number };
+      expect(result.spawn_mode).toBe("worktree");
+      // The worktree has a `.git` *file* (not directory) pointing to the
+      // parent repo. We just need to verify there was no error.
+      expect(existsSync(result.working_dir)).toBe(true);
+      await gracefulKill(result.pid, 2000);
+    } finally {
+      if (prevProj === undefined) delete process.env["CLAUDE_PROJECT_DIR"];
+      else process.env["CLAUDE_PROJECT_DIR"] = prevProj;
+    }
   });
 
   it("times out when fake binary does not print URL", async () => {

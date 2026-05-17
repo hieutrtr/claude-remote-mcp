@@ -35,7 +35,7 @@ export const definition = {
       sandbox: { type: "boolean" },
       initial_prompt: { type: "string", description: "Optional opening prompt; uses `claude --remote-control \"<prompt>\"` form when provided." },
       tags: { type: "array", items: { type: "string" }, default: [] },
-      git_init: { type: "boolean", description: "After mkdir, run `git init -b <branch>` and create an empty initial commit. Ignored for worktree mode.", default: false },
+      git_init: { type: "boolean", description: "After mkdir, run `git init -b <branch>` and create an empty initial commit so the session starts with its own clean repo. Defaults to true. Silently ignored for spawn_mode=worktree (which branches off an existing repo).", default: true },
       git_init_branch: { type: "string", description: "Branch name passed to `git init -b` when git_init is true.", default: "main" },
     },
     required: ["folder"],
@@ -55,12 +55,9 @@ export async function handler(raw: unknown): Promise<unknown> {
   let worktreeBranch: string | null = null;
 
   if (input.spawn_mode === "worktree") {
-    if (input.git_init) {
-      throw new CrmError(
-        ErrorCodes.INVALID_INPUT,
-        "git_init=true is incompatible with spawn_mode=worktree. A worktree branches off an existing repo and cannot init a fresh one.",
-      );
-    }
+    // git_init is silently ignored: a worktree branches off an existing repo
+    // and has no `.git` to init. We do NOT error here because git_init now
+    // defaults to true, so every worktree spawn would otherwise fail.
     if (!(await isGitRepo(projectDir))) {
       throw new CrmError(
         ErrorCodes.NOT_A_GIT_REPO,
