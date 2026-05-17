@@ -260,6 +260,30 @@ test/integration/     spawn integration with fake binary
 tasks/                roadmap referencing ARCH-x.y sections
 ```
 
+## Updates
+
+The plugin uses **semver in `plugin.json`** (bumped per release-worthy
+change), so `/plugin update` will pull the new version automatically:
+
+```text
+/plugin marketplace update hieutrtr
+/plugin update claude-remote-mcp@hieutrtr
+```
+
+See [CHANGELOG.md](./CHANGELOG.md) for what each version changed.
+
+If you were on an early `0.1.0` install where the version was pinned but
+multiple commits landed on top, do a one-time force-reinstall:
+
+```text
+/plugin uninstall claude-remote-mcp@hieutrtr
+/plugin marketplace remove hieutrtr
+/plugin marketplace add hieutrtr/claude-remote-mcp
+/plugin install claude-remote-mcp@hieutrtr
+```
+
+After that, `/plugin update` works normally.
+
 ## License
 
 MIT.
