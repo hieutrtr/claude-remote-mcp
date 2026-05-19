@@ -33,7 +33,7 @@ export const definition = {
       spawn_mode: { type: "string", enum: ["same-dir", "worktree", "session"], default: "same-dir" },
       worktree_branch: { type: "string" },
       sandbox: { type: "boolean" },
-      initial_prompt: { type: "string", description: "Optional opening prompt; uses `claude --remote-control \"<prompt>\"` form when provided." },
+      initial_prompt: { type: "string", description: "DEPRECATED / no-op. `claude remote-control` server mode does not accept an initial prompt. Send the first message from claude.ai/code or the mobile app instead. Passing this field returns a `notice` in the response and changes nothing else." },
       tags: { type: "array", items: { type: "string" }, default: [] },
       git_init: { type: "boolean", description: "After mkdir, run `git init -b <branch>` and create an empty initial commit so the session starts with its own clean repo. Defaults to true. Silently ignored for spawn_mode=worktree (which branches off an existing repo).", default: true },
       git_init_branch: { type: "string", description: "Branch name passed to `git init -b` when git_init is true.", default: "main" },
@@ -125,24 +125,28 @@ export async function handler(raw: unknown): Promise<unknown> {
   const logFile = childLogPath(sessionId);
   const logFd = openSync(logFile, "a");
 
-  // Global flags first (before subcommand). --dangerously-skip-permissions
-  // is a top-level `claude` flag and must precede `remote-control`.
-  const argv: string[] = [];
-  if (input.dangerously_skip_permissions) {
-    argv.push("--dangerously-skip-permissions");
-  }
-  if (input.initial_prompt) {
-    argv.push("--remote-control", input.initial_prompt);
-  } else {
-    argv.push("remote-control");
-  }
-  argv.push("--name", sessionName);
+  // The `remote-control` subcommand parser is strict: any global flag
+  // placed BEFORE the subcommand (e.g. `claude --dangerously-skip-permissions
+  // remote-control ...`) switches claude into interactive prompt mode and
+  // rejects the subcommand's own options as "unknown". So we always put the
+  // subcommand first and let it own all subsequent flags.
+  //
+  // initial_prompt is not supported by `claude remote-control` (server
+  // mode); the only way to seed a prompt is the interactive form
+  // `claude --remote-control "<name>"`, where the positional value is the
+  // session NAME, not a prompt. We keep the field for forward compatibility
+  // but treat it as a no-op for now.
+  const argv: string[] = ["remote-control", "--name", sessionName];
   if (input.spawn_mode === "session") {
     argv.push("--spawn", "session");
   } else if (input.spawn_mode === "worktree") {
     argv.push("--spawn", "worktree");
   }
   if (input.sandbox) argv.push("--sandbox");
+  if (input.dangerously_skip_permissions) {
+    argv.push("--dangerously-skip-permissions");
+  }
+  const initialPromptIgnored = Boolean(input.initial_prompt);
 
   let child;
   try {
@@ -213,6 +217,12 @@ export async function handler(raw: unknown): Promise<unknown> {
     ...entry,
     project_dir_used: projectDir,
     project_dir_source: projectDirSource,
+    ...(initialPromptIgnored
+      ? {
+          notice:
+            "initial_prompt was ignored: `claude remote-control` server mode does not accept an initial prompt. Send the first message from claude.ai/code or the mobile app instead.",
+        }
+      : {}),
   };
 }
 

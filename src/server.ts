@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   const server = new Server(
     {
       name: "claude-remote-mcp",
-      version: "0.1.2",
+      version: "0.1.3",
     },
     {
       capabilities: {

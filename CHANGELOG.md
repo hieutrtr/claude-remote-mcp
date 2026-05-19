@@ -2,6 +2,24 @@
 
 All notable changes to claude-remote-mcp.
 
+## 0.1.3 — 2026-05-17
+
+- **fix**: argv ordering for the spawned `claude` process. In 0.1.2 the
+  argv was `claude --dangerously-skip-permissions remote-control --name
+  X ...`, which makes claude treat `remote-control` as a prompt to the
+  interactive command and rejects every subsequent flag with
+  `error: unknown option '--name'` (etc.). The fix is to put the
+  subcommand first and let it own all flags:
+  `claude remote-control --name X --spawn ... --dangerously-skip-permissions`.
+  Verified by reproducing the error against claude 2.1.144.
+- **deprecate**: `initial_prompt` on `spawn_remote_session`. The
+  `claude remote-control` server subcommand does not accept an initial
+  prompt — only the interactive `claude --remote-control "<name>"` form
+  takes a positional value, and that value is the session NAME, not a
+  prompt. Passing `initial_prompt` is now a no-op; the response
+  includes a `notice` field pointing this out. Send the first message
+  from claude.ai/code or the mobile app instead.
+
 ## 0.1.2 — 2026-05-17
 
 - **change**: `spawn_remote_session` now passes

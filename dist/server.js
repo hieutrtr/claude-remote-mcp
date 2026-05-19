@@ -22917,7 +22917,7 @@ var definition7 = {
       spawn_mode: { type: "string", enum: ["same-dir", "worktree", "session"], default: "same-dir" },
       worktree_branch: { type: "string" },
       sandbox: { type: "boolean" },
-      initial_prompt: { type: "string", description: 'Optional opening prompt; uses `claude --remote-control "<prompt>"` form when provided.' },
+      initial_prompt: { type: "string", description: "DEPRECATED / no-op. `claude remote-control` server mode does not accept an initial prompt. Send the first message from claude.ai/code or the mobile app instead. Passing this field returns a `notice` in the response and changes nothing else." },
       tags: { type: "array", items: { type: "string" }, default: [] },
       git_init: { type: "boolean", description: "After mkdir, run `git init -b <branch>` and create an empty initial commit so the session starts with its own clean repo. Defaults to true. Silently ignored for spawn_mode=worktree (which branches off an existing repo).", default: true },
       git_init_branch: { type: "string", description: "Branch name passed to `git init -b` when git_init is true.", default: "main" },
@@ -22988,22 +22988,17 @@ async function handler7(raw) {
   mkdirSync4(path8.join(dataHome(), "logs"), { recursive: true });
   const logFile = childLogPath(sessionId);
   const logFd = openSync2(logFile, "a");
-  const argv = [];
-  if (input.dangerously_skip_permissions) {
-    argv.push("--dangerously-skip-permissions");
-  }
-  if (input.initial_prompt) {
-    argv.push("--remote-control", input.initial_prompt);
-  } else {
-    argv.push("remote-control");
-  }
-  argv.push("--name", sessionName);
+  const argv = ["remote-control", "--name", sessionName];
   if (input.spawn_mode === "session") {
     argv.push("--spawn", "session");
   } else if (input.spawn_mode === "worktree") {
     argv.push("--spawn", "worktree");
   }
   if (input.sandbox) argv.push("--sandbox");
+  if (input.dangerously_skip_permissions) {
+    argv.push("--dangerously-skip-permissions");
+  }
+  const initialPromptIgnored = Boolean(input.initial_prompt);
   let child;
   try {
     child = spawnDetached(claudeBin, argv, {
@@ -23069,7 +23064,10 @@ async function handler7(raw) {
   return {
     ...entry,
     project_dir_used: projectDir,
-    project_dir_source: projectDirSource
+    project_dir_source: projectDirSource,
+    ...initialPromptIgnored ? {
+      notice: "initial_prompt was ignored: `claude remote-control` server mode does not accept an initial prompt. Send the first message from claude.ai/code or the mobile app instead."
+    } : {}
   };
 }
 var __testing__ = { SpawnInputSchema };
@@ -23152,7 +23150,7 @@ async function main() {
   const server = new Server(
     {
       name: "claude-remote-mcp",
-      version: "0.1.2"
+      version: "0.1.3"
     },
     {
       capabilities: {
