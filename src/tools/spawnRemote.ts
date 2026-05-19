@@ -1,4 +1,4 @@
-import { mkdirSync, openSync, closeSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, openSync, closeSync } from "node:fs";
 import { hostname } from "node:os";
 import path from "node:path";
 import { appendAudit } from "../audit.js";
@@ -125,33 +125,26 @@ export async function handler(raw: unknown): Promise<unknown> {
   const logFile = childLogPath(sessionId);
   const logFd = openSync(logFile, "a");
 
-  // Permission bypass: write `.claude/settings.local.json` with
-  // `permissions.defaultMode: "bypassPermissions"` inside the working
-  // directory. We don't pass `--dangerously-skip-permissions` on argv
-  // because:
-  //   1. As a top-level flag it switches claude into interactive prompt
-  //      mode and the parser rejects the `remote-control` subcommand's
-  //      own flags.
-  //   2. As a subcommand flag, some claude builds accept it and others
-  //      reject it as "Unknown argument". The settings file is
-  //      version-stable.
-  // The setting is merged with whatever else is already in the file, and
-  // is local-only (gitignored by convention).
-  if (input.dangerously_skip_permissions) {
-    writeBypassPermissionsSetting(workingDir);
-  }
-
   // The `remote-control` subcommand parser is strict: any global flag
   // placed BEFORE the subcommand (e.g. `claude --some-global-flag
   // remote-control ...`) switches claude into interactive prompt mode and
-  // rejects the subcommand's own options as "unknown". So we always put the
-  // subcommand first and let it own all subsequent flags.
+  // rejects the subcommand's own options as "unknown". So we always put
+  // the subcommand first and let it own all subsequent flags.
   //
   // initial_prompt is not supported by `claude remote-control` (server
   // mode); the only way to seed a prompt is the interactive form
   // `claude --remote-control "<name>"`, where the positional value is the
   // session NAME, not a prompt. We keep the field for forward compatibility
   // but treat it as a no-op for now.
+  //
+  // Permission bypass: pass `--permission-mode bypassPermissions` to the
+  // subcommand. The bare `--dangerously-skip-permissions` flag is rejected
+  // as "Unknown argument" by `remote-control` on some claude builds, and
+  // setting `permissions.defaultMode: bypassPermissions` in
+  // `.claude/settings.local.json` is silently ignored — per the official
+  // docs, bypassPermissions can only be set in user-level
+  // ~/.claude/settings.json, not in project/local settings. The
+  // --permission-mode flag is the supported per-session override.
   const argv: string[] = ["remote-control", "--name", sessionName];
   if (input.spawn_mode === "session") {
     argv.push("--spawn", "session");
@@ -159,6 +152,9 @@ export async function handler(raw: unknown): Promise<unknown> {
     argv.push("--spawn", "worktree");
   }
   if (input.sandbox) argv.push("--sandbox");
+  if (input.dangerously_skip_permissions) {
+    argv.push("--permission-mode", "bypassPermissions");
+  }
   const initialPromptIgnored = Boolean(input.initial_prompt);
 
   let child;
@@ -237,35 +233,6 @@ export async function handler(raw: unknown): Promise<unknown> {
         }
       : {}),
   };
-}
-
-function writeBypassPermissionsSetting(workingDir: string): void {
-  const settingsDir = path.join(workingDir, ".claude");
-  const settingsFile = path.join(settingsDir, "settings.local.json");
-  mkdirSync(settingsDir, { recursive: true });
-
-  let existing: Record<string, unknown> = {};
-  if (existsSync(settingsFile)) {
-    try {
-      const raw = readFileSync(settingsFile, "utf8");
-      const parsed: unknown = JSON.parse(raw);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        existing = parsed as Record<string, unknown>;
-      }
-    } catch {
-      // Corrupt or unreadable — start fresh rather than crash.
-    }
-  }
-
-  const permsRaw = existing["permissions"];
-  const perms: Record<string, unknown> =
-    permsRaw && typeof permsRaw === "object" && !Array.isArray(permsRaw)
-      ? (permsRaw as Record<string, unknown>)
-      : {};
-  perms["defaultMode"] = "bypassPermissions";
-  existing["permissions"] = perms;
-
-  writeFileSync(settingsFile, JSON.stringify(existing, null, 2), { encoding: "utf8" });
 }
 
 export const __testing__ = { SpawnInputSchema };

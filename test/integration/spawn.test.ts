@@ -10,6 +10,9 @@ import { runCommand } from "../../src/claudeCli.js";
 
 function makeFakeClaude(dir: string): string {
   const script = `#!/usr/bin/env bash
+# Echo argv to stdout (captured by child logfile) so tests can assert
+# how the MCP server built the command line for \`claude\`.
+echo "ARGV $@"
 echo "Boot..."
 echo "Open: https://claude.ai/code/fake-$$-$RANDOM"
 echo "Ready"
@@ -122,61 +125,41 @@ describe("spawn_remote_session integration", () => {
     await gracefulKill(result.pid, 2000);
   });
 
-  it("writes .claude/settings.local.json with bypassPermissions by default", async () => {
-    const folder = path.join(tmpHome, "bypass-dir");
+  it("appends --permission-mode bypassPermissions to the spawned argv by default", async () => {
+    const folder = path.join(tmpHome, "permmode-dir");
     const result = (await spawnHandler({
       folder,
-      name: "bypass",
-    })) as { working_dir: string; pid: number };
-
-    const settingsPath = path.join(result.working_dir, ".claude", "settings.local.json");
-    expect(existsSync(settingsPath)).toBe(true);
-    const settings = JSON.parse(
-      (await import("node:fs")).readFileSync(settingsPath, "utf8"),
-    ) as { permissions?: { defaultMode?: string } };
-    expect(settings.permissions?.defaultMode).toBe("bypassPermissions");
-    await gracefulKill(result.pid, 2000);
-  });
-
-  it("preserves other keys in settings.local.json when merging bypassPermissions", async () => {
-    const folder = path.join(tmpHome, "merge-dir");
+      name: "permmode",
+    })) as { working_dir: string; pid: number; session_id: string };
     const fs = await import("node:fs");
-    fs.mkdirSync(path.join(folder, ".claude"), { recursive: true });
-    fs.writeFileSync(
-      path.join(folder, ".claude", "settings.local.json"),
-      JSON.stringify({
-        theme: "dark",
-        permissions: { allow: ["Read"] },
-      }),
-    );
-
-    const result = (await spawnHandler({
-      folder,
-      name: "merge",
-    })) as { working_dir: string; pid: number };
-
-    const settings = JSON.parse(
-      fs.readFileSync(
-        path.join(result.working_dir, ".claude", "settings.local.json"),
-        "utf8",
-      ),
-    ) as { theme?: string; permissions?: { defaultMode?: string; allow?: string[] } };
-    expect(settings.theme).toBe("dark");
-    expect(settings.permissions?.allow).toEqual(["Read"]);
-    expect(settings.permissions?.defaultMode).toBe("bypassPermissions");
+    const { childLogPath } = await import("../../src/paths.js");
+    const log = fs.readFileSync(childLogPath(result.session_id), "utf8");
+    expect(log).toMatch(/ARGV .*--permission-mode bypassPermissions/);
+    expect(log).toMatch(/ARGV .*remote-control/);
+    expect(log).toMatch(/ARGV .*--name permmode/);
+    // Subcommand must precede every flag — the parser bug we're guarding
+    // against is the one where `--permission-mode` (or any flag) appears
+    // before `remote-control`.
+    const argvLine = log.split("\n").find((l) => l.startsWith("ARGV "));
+    expect(argvLine).toBeTruthy();
+    const idxSub = argvLine!.indexOf("remote-control");
+    const idxPerm = argvLine!.indexOf("--permission-mode");
+    expect(idxSub).toBeGreaterThanOrEqual(0);
+    expect(idxPerm).toBeGreaterThan(idxSub);
     await gracefulKill(result.pid, 2000);
   });
 
-  it("skips settings write when dangerously_skip_permissions is false", async () => {
-    const folder = path.join(tmpHome, "no-bypass-dir");
+  it("omits --permission-mode when dangerously_skip_permissions is false", async () => {
+    const folder = path.join(tmpHome, "no-permmode-dir");
     const result = (await spawnHandler({
       folder,
-      name: "no-bypass",
+      name: "no-permmode",
       dangerously_skip_permissions: false,
-    })) as { working_dir: string; pid: number };
-
-    const settingsPath = path.join(result.working_dir, ".claude", "settings.local.json");
-    expect(existsSync(settingsPath)).toBe(false);
+    })) as { working_dir: string; pid: number; session_id: string };
+    const fs = await import("node:fs");
+    const { childLogPath } = await import("../../src/paths.js");
+    const log = fs.readFileSync(childLogPath(result.session_id), "utf8");
+    expect(log).not.toMatch(/--permission-mode/);
     await gracefulKill(result.pid, 2000);
   });
 

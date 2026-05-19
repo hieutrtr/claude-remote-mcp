@@ -2,6 +2,27 @@
 
 All notable changes to claude-remote-mcp.
 
+## 0.1.5 — 2026-05-17
+
+- **fix**: switch from `.claude/settings.local.json` to the
+  `--permission-mode bypassPermissions` CLI flag. The settings-file
+  approach in 0.1.4 was silently ignored by claude — per the official
+  permission docs, `bypassPermissions` as a `permissions.defaultMode`
+  value is **restricted to user-level `~/.claude/settings.json`** and
+  cannot be set in project/local settings (security: prevent untrusted
+  repos from auto-bypassing). The session fell back to `acceptEdits`,
+  which still prompts for Bash and other non-edit tools.
+- The argv is now
+  `claude remote-control --name X [--spawn ...] [--sandbox]
+  --permission-mode bypassPermissions`. Verified against
+  `claude --help` (where `--permission-mode <mode>` is listed with
+  `bypassPermissions` as a valid choice) and against the subcommand
+  parser (the flag must follow `remote-control` to avoid the parser
+  switch into interactive prompt mode).
+- Tests now use a fake `claude` binary that echoes its received argv,
+  so the integration suite asserts both presence and position of
+  `--permission-mode bypassPermissions` directly.
+
 ## 0.1.4 — 2026-05-17
 
 - **fix**: switch from `--dangerously-skip-permissions` argv flag to
