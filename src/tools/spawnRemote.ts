@@ -1,4 +1,4 @@
-import { mkdirSync, openSync, closeSync } from "node:fs";
+import { mkdirSync, openSync, closeSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 import path from "node:path";
 import { appendAudit } from "../audit.js";
@@ -37,7 +37,7 @@ export const definition = {
       tags: { type: "array", items: { type: "string" }, default: [] },
       git_init: { type: "boolean", description: "After mkdir, run `git init -b <branch>` and create an empty initial commit so the session starts with its own clean repo. Defaults to true. Silently ignored for spawn_mode=worktree (which branches off an existing repo).", default: true },
       git_init_branch: { type: "string", description: "Branch name passed to `git init -b` when git_init is true.", default: "main" },
-      dangerously_skip_permissions: { type: "boolean", description: "Pass `--dangerously-skip-permissions` to the spawned `claude` process so the remote session never prompts for tool approval. Defaults to true — remote sessions are designed to be driven from mobile/web where tapping approve is painful. Pass false to keep the standard permission flow.", default: true },
+      dangerously_skip_permissions: { type: "boolean", description: "When true (default), maximize the autonomy of the spawned session by launching with `--permission-mode acceptEdits` AND writing broad `permissions.allow` rules into the working dir's .claude/settings.local.json. Note: Remote Control sessions cannot actually use `bypassPermissions` or `auto` mode — Claude restricts those for safety since the user is likely on mobile. `acceptEdits` + broad allow list is the closest approximation. Set false to keep the standard prompt flow.", default: true },
     },
     required: ["folder"],
     additionalProperties: false,
@@ -125,26 +125,43 @@ export async function handler(raw: unknown): Promise<unknown> {
   const logFile = childLogPath(sessionId);
   const logFd = openSync(logFile, "a");
 
-  // The `remote-control` subcommand parser is strict: any global flag
-  // placed BEFORE the subcommand (e.g. `claude --some-global-flag
-  // remote-control ...`) switches claude into interactive prompt mode and
-  // rejects the subcommand's own options as "unknown". So we always put
+  // Permission strategy for Remote Control sessions.
+  //
+  // The official docs are explicit: for Remote Control sessions, only
+  // "Ask permissions", "Auto accept edits", and "Plan" modes are
+  // available. **Auto and Bypass permissions are NOT available** —
+  // Claude silently downgrades both to acceptEdits, by design (a user
+  // driving the session from mobile is potentially away from the
+  // keyboard, so the most permissive mode is gated off).
+  //
+  // We therefore aim for "as autonomous as Claude lets us":
+  //   1. Pass `--permission-mode acceptEdits` to launch the session in
+  //      the highest mode Remote Control allows.
+  //   2. Layer broad `permissions.allow` rules into
+  //      `.claude/settings.local.json` so Bash, WebFetch, WebSearch,
+  //      Agent (and the rest of the built-in toolbelt) don't prompt
+  //      either. `allow` rules ARE honored in project/local settings;
+  //      only `defaultMode: bypassPermissions/auto` is restricted there.
+  //
+  // The combined effect approximates bypassPermissions for everything
+  // the session is likely to do inside its own working dir. Writes
+  // outside the working dir, and tools matching `ask` or `deny` rules,
+  // still prompt — but those are usually what you want anyway.
+  //
+  // Parser detail: any global flag placed BEFORE the `remote-control`
+  // subcommand switches claude into interactive prompt mode and the
+  // subcommand's options get rejected as "unknown". So we always put
   // the subcommand first and let it own all subsequent flags.
   //
   // initial_prompt is not supported by `claude remote-control` (server
   // mode); the only way to seed a prompt is the interactive form
-  // `claude --remote-control "<name>"`, where the positional value is the
-  // session NAME, not a prompt. We keep the field for forward compatibility
-  // but treat it as a no-op for now.
-  //
-  // Permission bypass: pass `--permission-mode bypassPermissions` to the
-  // subcommand. The bare `--dangerously-skip-permissions` flag is rejected
-  // as "Unknown argument" by `remote-control` on some claude builds, and
-  // setting `permissions.defaultMode: bypassPermissions` in
-  // `.claude/settings.local.json` is silently ignored — per the official
-  // docs, bypassPermissions can only be set in user-level
-  // ~/.claude/settings.json, not in project/local settings. The
-  // --permission-mode flag is the supported per-session override.
+  // `claude --remote-control "<name>"`, where the positional value is
+  // the session NAME, not a prompt. We keep the field for forward
+  // compatibility but treat it as a no-op for now.
+  if (input.dangerously_skip_permissions) {
+    writeBroadAllowSettings(workingDir);
+  }
+
   const argv: string[] = ["remote-control", "--name", sessionName];
   if (input.spawn_mode === "session") {
     argv.push("--spawn", "session");
@@ -153,7 +170,7 @@ export async function handler(raw: unknown): Promise<unknown> {
   }
   if (input.sandbox) argv.push("--sandbox");
   if (input.dangerously_skip_permissions) {
-    argv.push("--permission-mode", "bypassPermissions");
+    argv.push("--permission-mode", "acceptEdits");
   }
   const initialPromptIgnored = Boolean(input.initial_prompt);
 
@@ -235,5 +252,67 @@ export async function handler(raw: unknown): Promise<unknown> {
   };
 }
 
-export const __testing__ = { SpawnInputSchema };
+/**
+ * Broad allow list of built-in tools so `acceptEdits` mode (the highest
+ * mode Remote Control sessions can actually enter) doesn't prompt for
+ * Bash, WebFetch, etc. Project/local settings cannot grant
+ * `defaultMode: bypassPermissions`, but they CAN list bare tool names in
+ * `permissions.allow`, which has the same effect of skipping the prompt.
+ *
+ * MCP server tools follow the `mcp__<server>__<tool>` naming scheme and
+ * cannot be matched with a generic wildcard, so users with MCP servers
+ * still get prompted for them. We document this in the README; users can
+ * add per-server allow rules themselves if needed.
+ */
+const BROAD_ALLOW: readonly string[] = [
+  "Bash",
+  "WebFetch",
+  "WebSearch",
+  "Read",
+  "Edit",
+  "Write",
+  "MultiEdit",
+  "Glob",
+  "Grep",
+  "NotebookEdit",
+  "Agent",
+];
+
+function writeBroadAllowSettings(workingDir: string): void {
+  const settingsDir = path.join(workingDir, ".claude");
+  const settingsFile = path.join(settingsDir, "settings.local.json");
+  mkdirSync(settingsDir, { recursive: true });
+
+  let existing: Record<string, unknown> = {};
+  if (existsSync(settingsFile)) {
+    try {
+      const raw = readFileSync(settingsFile, "utf8");
+      const parsed: unknown = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        existing = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Corrupt or unreadable — start fresh rather than crash.
+    }
+  }
+
+  const permsRaw = existing["permissions"];
+  const perms: Record<string, unknown> =
+    permsRaw && typeof permsRaw === "object" && !Array.isArray(permsRaw)
+      ? (permsRaw as Record<string, unknown>)
+      : {};
+  const existingAllow: unknown = perms["allow"];
+  const allowList: string[] = Array.isArray(existingAllow)
+    ? (existingAllow as unknown[]).filter((v): v is string => typeof v === "string")
+    : [];
+  for (const rule of BROAD_ALLOW) {
+    if (!allowList.includes(rule)) allowList.push(rule);
+  }
+  perms["allow"] = allowList;
+  existing["permissions"] = perms;
+
+  writeFileSync(settingsFile, JSON.stringify(existing, null, 2), { encoding: "utf8" });
+}
+
+export const __testing__ = { SpawnInputSchema, BROAD_ALLOW };
 export type { SpawnInput };

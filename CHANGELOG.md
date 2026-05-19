@@ -2,6 +2,38 @@
 
 All notable changes to claude-remote-mcp.
 
+## 0.1.6 — 2026-05-17
+
+- **fix**: stop trying to launch spawned sessions in `bypassPermissions`
+  mode — the docs are explicit that **`bypassPermissions` and `auto` are
+  not available for Remote Control sessions**. Claude silently
+  downgrades to `acceptEdits` regardless of what `--permission-mode` or
+  `permissions.defaultMode` says, by design (the user driving the
+  session from mobile is potentially away from the keyboard).
+
+  This is why 0.1.5 still landed at "accept edits": Claude restricted
+  the mode, not our flag.
+
+- **change**: take the best Remote Control actually allows. Launch with
+  `--permission-mode acceptEdits` AND write a broad
+  `permissions.allow` list (`Bash`, `WebFetch`, `WebSearch`, `Read`,
+  `Edit`, `Write`, `MultiEdit`, `Glob`, `Grep`, `NotebookEdit`,
+  `Agent`) into the working dir's `.claude/settings.local.json`.
+  Combined, these cover essentially every built-in tool action that
+  would otherwise prompt, while staying within what Remote Control
+  permits.
+
+- **note**: MCP server tools follow `mcp__<server>__<tool>` naming and
+  can't be matched with a wildcard, so MCP calls from inside the
+  spawned session still prompt. Users with their own MCP servers can
+  add per-server allow rules manually
+  (`"mcp__servername__*"`).
+
+- Pre-existing settings.local.json entries are preserved on merge: the
+  broad allow list is appended to whatever `permissions.allow` already
+  has, and any non-`permissions` top-level keys (e.g. `theme`) are
+  untouched. Verified by an additional integration test.
+
 ## 0.1.5 — 2026-05-17
 
 - **fix**: switch from `.claude/settings.local.json` to the

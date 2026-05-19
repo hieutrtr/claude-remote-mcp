@@ -125,7 +125,10 @@ describe("spawn_remote_session integration", () => {
     await gracefulKill(result.pid, 2000);
   });
 
-  it("appends --permission-mode bypassPermissions to the spawned argv by default", async () => {
+  it("launches with --permission-mode acceptEdits + broad allow list by default", async () => {
+    // Remote Control sessions cannot enter `bypassPermissions` — Claude
+    // silently downgrades. acceptEdits is the highest reachable mode, so
+    // we use it and supplement with broad allow rules.
     const folder = path.join(tmpHome, "permmode-dir");
     const result = (await spawnHandler({
       folder,
@@ -134,22 +137,59 @@ describe("spawn_remote_session integration", () => {
     const fs = await import("node:fs");
     const { childLogPath } = await import("../../src/paths.js");
     const log = fs.readFileSync(childLogPath(result.session_id), "utf8");
-    expect(log).toMatch(/ARGV .*--permission-mode bypassPermissions/);
+    expect(log).toMatch(/ARGV .*--permission-mode acceptEdits/);
     expect(log).toMatch(/ARGV .*remote-control/);
     expect(log).toMatch(/ARGV .*--name permmode/);
-    // Subcommand must precede every flag — the parser bug we're guarding
-    // against is the one where `--permission-mode` (or any flag) appears
-    // before `remote-control`.
     const argvLine = log.split("\n").find((l) => l.startsWith("ARGV "));
     expect(argvLine).toBeTruthy();
     const idxSub = argvLine!.indexOf("remote-control");
     const idxPerm = argvLine!.indexOf("--permission-mode");
     expect(idxSub).toBeGreaterThanOrEqual(0);
     expect(idxPerm).toBeGreaterThan(idxSub);
+
+    // settings.local.json with broad allow list
+    const settingsPath = path.join(result.working_dir, ".claude", "settings.local.json");
+    expect(fs.existsSync(settingsPath)).toBe(true);
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as {
+      permissions?: { allow?: string[] };
+    };
+    expect(settings.permissions?.allow).toEqual(
+      expect.arrayContaining(["Bash", "WebFetch", "Read", "Edit", "Write", "Agent"]),
+    );
     await gracefulKill(result.pid, 2000);
   });
 
-  it("omits --permission-mode when dangerously_skip_permissions is false", async () => {
+  it("preserves pre-existing allow entries + other top-level keys", async () => {
+    const folder = path.join(tmpHome, "merge-perms-dir");
+    const fs = await import("node:fs");
+    fs.mkdirSync(path.join(folder, ".claude"), { recursive: true });
+    fs.writeFileSync(
+      path.join(folder, ".claude", "settings.local.json"),
+      JSON.stringify({
+        theme: "dark",
+        permissions: { allow: ["Bash(custom-cmd *)"] },
+      }),
+    );
+
+    const result = (await spawnHandler({
+      folder,
+      name: "merge-perms",
+    })) as { working_dir: string; pid: number };
+
+    const settings = JSON.parse(
+      fs.readFileSync(
+        path.join(result.working_dir, ".claude", "settings.local.json"),
+        "utf8",
+      ),
+    ) as { theme?: string; permissions?: { allow?: string[] } };
+    expect(settings.theme).toBe("dark");
+    expect(settings.permissions?.allow).toEqual(
+      expect.arrayContaining(["Bash(custom-cmd *)", "Bash", "Edit", "Write"]),
+    );
+    await gracefulKill(result.pid, 2000);
+  });
+
+  it("omits --permission-mode and skips settings write when opted out", async () => {
     const folder = path.join(tmpHome, "no-permmode-dir");
     const result = (await spawnHandler({
       folder,
@@ -160,6 +200,7 @@ describe("spawn_remote_session integration", () => {
     const { childLogPath } = await import("../../src/paths.js");
     const log = fs.readFileSync(childLogPath(result.session_id), "utf8");
     expect(log).not.toMatch(/--permission-mode/);
+    expect(fs.existsSync(path.join(result.working_dir, ".claude", "settings.local.json"))).toBe(false);
     await gracefulKill(result.pid, 2000);
   });
 
