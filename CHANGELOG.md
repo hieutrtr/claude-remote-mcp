@@ -2,6 +2,24 @@
 
 All notable changes to claude-remote-mcp.
 
+## 0.1.4 — 2026-05-17
+
+- **fix**: switch from `--dangerously-skip-permissions` argv flag to
+  `.claude/settings.local.json` with `permissions.defaultMode:
+  "bypassPermissions"`. 0.1.3's per-subcommand flag works on some
+  claude builds but not on others — the user reported
+  `Error: Unknown argument: --dangerously-skip-permissions` against
+  their claude. The settings file is version-stable and produces
+  identical runtime behavior (every tool call auto-approved).
+- The settings file is merged into any existing
+  `.claude/settings.local.json` in the working dir, preserving other
+  keys (e.g. `theme`, an existing `permissions.allow` list). Only
+  `permissions.defaultMode` is overwritten.
+- `dangerously_skip_permissions: false` now skips writing the settings
+  file entirely, leaving the working dir untouched.
+- 3 new integration tests for the settings.local.json flow: default
+  write, key-preserving merge, skip-on-opt-out.
+
 ## 0.1.3 — 2026-05-17
 
 - **fix**: argv ordering for the spawned `claude` process. In 0.1.2 the

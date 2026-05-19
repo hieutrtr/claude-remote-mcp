@@ -22850,7 +22850,7 @@ __export(spawnRemote_exports, {
   definition: () => definition7,
   handler: () => handler7
 });
-import { mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2 } from "node:fs";
+import { mkdirSync as mkdirSync4, openSync as openSync2, closeSync as closeSync2, existsSync as existsSync4, readFileSync as readFileSync3, writeFileSync as writeFileSync3 } from "node:fs";
 import { hostname as hostname4 } from "node:os";
 import path8 from "node:path";
 
@@ -22988,6 +22988,9 @@ async function handler7(raw) {
   mkdirSync4(path8.join(dataHome(), "logs"), { recursive: true });
   const logFile = childLogPath(sessionId);
   const logFd = openSync2(logFile, "a");
+  if (input.dangerously_skip_permissions) {
+    writeBypassPermissionsSetting(workingDir);
+  }
   const argv = ["remote-control", "--name", sessionName];
   if (input.spawn_mode === "session") {
     argv.push("--spawn", "session");
@@ -22995,9 +22998,6 @@ async function handler7(raw) {
     argv.push("--spawn", "worktree");
   }
   if (input.sandbox) argv.push("--sandbox");
-  if (input.dangerously_skip_permissions) {
-    argv.push("--dangerously-skip-permissions");
-  }
   const initialPromptIgnored = Boolean(input.initial_prompt);
   let child;
   try {
@@ -23069,6 +23069,27 @@ async function handler7(raw) {
       notice: "initial_prompt was ignored: `claude remote-control` server mode does not accept an initial prompt. Send the first message from claude.ai/code or the mobile app instead."
     } : {}
   };
+}
+function writeBypassPermissionsSetting(workingDir) {
+  const settingsDir = path8.join(workingDir, ".claude");
+  const settingsFile = path8.join(settingsDir, "settings.local.json");
+  mkdirSync4(settingsDir, { recursive: true });
+  let existing = {};
+  if (existsSync4(settingsFile)) {
+    try {
+      const raw = readFileSync3(settingsFile, "utf8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        existing = parsed;
+      }
+    } catch {
+    }
+  }
+  const permsRaw = existing["permissions"];
+  const perms = permsRaw && typeof permsRaw === "object" && !Array.isArray(permsRaw) ? permsRaw : {};
+  perms["defaultMode"] = "bypassPermissions";
+  existing["permissions"] = perms;
+  writeFileSync3(settingsFile, JSON.stringify(existing, null, 2), { encoding: "utf8" });
 }
 var __testing__ = { SpawnInputSchema };
 
@@ -23150,7 +23171,7 @@ async function main() {
   const server = new Server(
     {
       name: "claude-remote-mcp",
-      version: "0.1.3"
+      version: "0.1.4"
     },
     {
       capabilities: {

@@ -122,6 +122,64 @@ describe("spawn_remote_session integration", () => {
     await gracefulKill(result.pid, 2000);
   });
 
+  it("writes .claude/settings.local.json with bypassPermissions by default", async () => {
+    const folder = path.join(tmpHome, "bypass-dir");
+    const result = (await spawnHandler({
+      folder,
+      name: "bypass",
+    })) as { working_dir: string; pid: number };
+
+    const settingsPath = path.join(result.working_dir, ".claude", "settings.local.json");
+    expect(existsSync(settingsPath)).toBe(true);
+    const settings = JSON.parse(
+      (await import("node:fs")).readFileSync(settingsPath, "utf8"),
+    ) as { permissions?: { defaultMode?: string } };
+    expect(settings.permissions?.defaultMode).toBe("bypassPermissions");
+    await gracefulKill(result.pid, 2000);
+  });
+
+  it("preserves other keys in settings.local.json when merging bypassPermissions", async () => {
+    const folder = path.join(tmpHome, "merge-dir");
+    const fs = await import("node:fs");
+    fs.mkdirSync(path.join(folder, ".claude"), { recursive: true });
+    fs.writeFileSync(
+      path.join(folder, ".claude", "settings.local.json"),
+      JSON.stringify({
+        theme: "dark",
+        permissions: { allow: ["Read"] },
+      }),
+    );
+
+    const result = (await spawnHandler({
+      folder,
+      name: "merge",
+    })) as { working_dir: string; pid: number };
+
+    const settings = JSON.parse(
+      fs.readFileSync(
+        path.join(result.working_dir, ".claude", "settings.local.json"),
+        "utf8",
+      ),
+    ) as { theme?: string; permissions?: { defaultMode?: string; allow?: string[] } };
+    expect(settings.theme).toBe("dark");
+    expect(settings.permissions?.allow).toEqual(["Read"]);
+    expect(settings.permissions?.defaultMode).toBe("bypassPermissions");
+    await gracefulKill(result.pid, 2000);
+  });
+
+  it("skips settings write when dangerously_skip_permissions is false", async () => {
+    const folder = path.join(tmpHome, "no-bypass-dir");
+    const result = (await spawnHandler({
+      folder,
+      name: "no-bypass",
+      dangerously_skip_permissions: false,
+    })) as { working_dir: string; pid: number };
+
+    const settingsPath = path.join(result.working_dir, ".claude", "settings.local.json");
+    expect(existsSync(settingsPath)).toBe(false);
+    await gracefulKill(result.pid, 2000);
+  });
+
   it("expands a leading `~` to the user's home directory", async () => {
     // We point HOME at a tmp dir so the test doesn't pollute the real home.
     const fakeHome = mkdtempSync(path.join(tmpdir(), "crm-home-"));
